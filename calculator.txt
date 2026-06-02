@@ -1,0 +1,150 @@
+calc.l
+/* calc.l - Lexer for simple calculator with modulus and exponentiation */
+%{
+#include <stdio.h>
+#include <string.h>
+#include "calc.tab.h"   /* Include YACC-generated token definitions */
+
+double num;             /* Stores the numeric value */
+%}
+
+%%
+
+[0-9]+(\.[0-9]+)?  {
+    /* Match integers and decimals, convert to double */
+    num = atof(yytext);
+    yylval.dval = num;
+    return NUMBER;
+}
+
+"+"    { return PLUS;   }   /* Addition operator        */
+"-"    { return MINUS;  }   /* Subtraction operator     */
+"*"    { return TIMES;  }   /* Multiplication operator  */
+"/"    { return DIVIDE; }   /* Division operator        */
+"%"    { return MODULO; }   /* Modulus operator         */
+"^"    { return POWER;  }   /* Exponentiation operator  */
+"("    { return LPAREN; }   /* Left parenthesis         */
+")"    { return RPAREN; }   /* Right parenthesis        */
+"\n"   { return NEWLINE; }  /* End of expression        */
+
+[ \t]  ;                    /* Ignore spaces and tabs   */
+
+.      {
+    /* Unknown character */
+    printf("Unknown character: %s\n", yytext);
+}
+
+%%
+
+int yywrap() {
+    return 1;   /* Signal end of input */
+}
+
+
+calc.y
+/* calc.y - Parser for simple calculator with modulus and exponentiation */
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>       /* pow() for exponentiation, fmod() for modulus */
+
+void yyerror(const char *msg);
+int  yylex();
+%}
+
+/* Define value type as double */
+%union {
+    double dval;
+}
+
+/* Declare tokens from lexer */
+%token <dval> NUMBER
+%token PLUS MINUS TIMES DIVIDE MODULO POWER
+%token LPAREN RPAREN NEWLINE
+
+/* Declare result type for expressions */
+%type  <dval> expr term factor base
+
+/* Operator precedence: lower listed = lower precedence */
+%left  PLUS MINUS           /* Lowest precedence        */
+%left  TIMES DIVIDE MODULO  /* Same level as * and /    */
+%right POWER                /* Right-assoc: 2^3^2=2^9   */
+%right UMINUS               /* Unary minus (highest)    */
+
+%%
+
+/* --- Grammar Rules --- */
+
+program:
+    /* empty */
+    | program line
+    ;
+
+line:
+    NEWLINE                 /* Blank line, do nothing */
+    | expr NEWLINE  {
+        /* Print result after each complete expression */
+        printf("= %.6g\n", $1);
+    }
+    ;
+
+/* Addition and subtraction */
+expr:
+    expr PLUS  term  { $$ = $1 + $3; }
+    | expr MINUS term  { $$ = $1 - $3; }
+    | term             { $$ = $1;       }
+    ;
+
+/* Multiplication, division, and modulus */
+term:
+    term TIMES  factor { $$ = $1 * $3; }
+    | term DIVIDE factor {
+        /* Guard against division by zero */
+        if ($3 == 0) {
+            printf("Error: Division by zero\n");
+            $$ = 0;
+        } else {
+            $$ = $1 / $3;
+        }
+    }
+    | term MODULO factor {
+        /* Modulus: remainder after division */
+        if ($3 == 0) {
+            printf("Error: Modulo by zero\n");
+            $$ = 0;
+        } else {
+            $$ = fmod($1, $3);   /* fmod works for doubles */
+        }
+    }
+    | factor           { $$ = $1; }
+    ;
+
+/* Exponentiation (right-associative: 2^3^2 = 2^(3^2) = 512) */
+factor:
+    base POWER factor  { $$ = pow($1, $3); }   /* Use math.h pow() */
+    | base               { $$ = $1; }
+    ;
+
+/* Numbers, parenthesised sub-expressions, unary minus */
+base:
+    NUMBER             { $$ = $1;  }
+    | LPAREN expr RPAREN { $$ = $2; }
+    | MINUS base %prec UMINUS { $$ = -$2; }   /* Unary minus */
+    ;
+
+%%
+
+/* --- Error handler --- */
+void yyerror(const char *msg) {
+    fprintf(stderr, "Error: %s\n", msg);
+}
+
+int main() {
+    printf("Simple Calculator (LEX + YACC)\n");
+    printf("Operators: + - * / %% ^ and ( )\n");
+    printf("  %%  = modulus  (remainder)  e.g.  10 %% 3 = 1\n");
+    printf("  ^   = power    (exponent)   e.g.  2 ^ 8  = 256\n");
+    printf("Press Ctrl+D to exit.\n\n");
+    yyparse();      /* Start parsing */
+    return 0;
+}

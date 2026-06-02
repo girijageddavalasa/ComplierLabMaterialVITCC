@@ -1,0 +1,600 @@
+// three address code
+bison -d tac.y 
+flex tac.l
+gcc tac.tab.c lex.yy.c -o tacc
+./tacc
+//tac.l
+%{
+#include "tac.tab.h"
+#include <stdlib.h>
+#include <string.h>
+%}
+
+%%
+
+[0-9]+        { yylval.ival = atoi(yytext); return NUM; }
+[a-zA-Z]+     { strcpy(yylval.sval, yytext); return ID; }
+
+[+\-*/^=();]  { return yytext[0]; }   // include ^
+
+[ \t\n]+      ;   // skip spaces
+
+.             { printf("Invalid\n"); }
+
+%%
+
+int yywrap() { return 1; }
+
+_________________________
+
+//tac.y
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int temp = 0;
+
+char* newtemp() {
+    static char t[10];
+    sprintf(t, "t%d", temp++);   // create t0, t1...
+    return t;
+}
+
+void yyerror(char *s) {
+    printf("Error\n");
+}
+
+int yylex();
+%}
+
+%union {
+    int ival;
+    char sval[20];
+}
+
+%token <ival> NUM
+%token <sval> ID
+
+%type <sval> expr term power factor
+
+%%
+
+stmt : ID '=' expr ';'
+      { printf("%s = %s\n", $1, $3); }   // final result
+     ;
+
+/* + and - (lowest priority) */
+expr : expr '+' term {
+        char *t = newtemp();
+        printf("%s = %s + %s\n", t, $1, $3);
+        strcpy($$, t);
+     }
+     | expr '-' term {
+        char *t = newtemp();
+        printf("%s = %s - %s\n", t, $1, $3);
+        strcpy($$, t);
+     }
+     | term { strcpy($$, $1); }
+     ;
+
+/* * and / */
+term : term '*' power {
+        char *t = newtemp();
+        printf("%s = %s * %s\n", t, $1, $3);
+        strcpy($$, t);
+     }
+     | term '/' power {
+        char *t = newtemp();
+        printf("%s = %s / %s\n", t, $1, $3);
+        strcpy($$, t);
+     }
+     | power { strcpy($$, $1); }
+     ;
+
+/* ^ (highest priority) */
+power : factor '^' power {
+        char *t = newtemp();
+        printf("%s = %s ^ %s\n", t, $1, $3);
+        strcpy($$, t);
+     }
+     | factor { strcpy($$, $1); }
+     ;
+
+factor : '(' expr ')' { strcpy($$, $2); }
+       | NUM { sprintf($$, "%d", $1); }
+       | ID  { strcpy($$, $1); }
+       ;
+
+%%
+
+int main() {
+    printf("Enter: ");
+    yyparse();
+    return 0;
+}
+
+
+
+______________________________________________
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+char input[100];
+int pos = 0;
+int tempCount = 0;
+
+/* Generate temp variables t0, t1... */
+char* newtemp() {
+    static char temp[10];
+    sprintf(temp, "t%d", tempCount++);
+    return temp;
+}
+
+/* Skip spaces */
+void skipSpaces() {
+    while (isspace(input[pos])) pos++;
+}
+
+/* Read identifier */
+char* parseID() {
+    static char id[20];
+    int i = 0;
+
+    skipSpaces();
+
+    while (isalnum(input[pos])) {
+        id[i++] = input[pos++];
+    }
+    id[i] = '\0';
+
+    return id;
+}
+
+/* Read number */
+char* parseNUM() {
+    static char num[20];
+    int i = 0;
+
+    skipSpaces();
+
+    while (isdigit(input[pos])) {
+        num[i++] = input[pos++];
+    }
+    num[i] = '\0';
+
+    return num;
+}
+
+/* Forward declarations */
+char* expr();
+char* term();
+char* power();
+char* factor();
+
+/* factor -> (expr) | ID | NUM */
+char* factor() {
+    skipSpaces();
+
+    if (input[pos] == '(') {
+        pos++;
+        char* e = expr();
+        skipSpaces();
+        if (input[pos] == ')') pos++;
+        return e;
+    }
+
+    if (isalpha(input[pos])) {
+        return parseID();
+    }
+
+    if (isdigit(input[pos])) {
+        return parseNUM();
+    }
+
+    return "";
+}
+
+/* power -> factor ^ power */
+char* power() {
+    char* left = factor();
+    skipSpaces();
+
+    if (input[pos] == '^') {
+        pos++;
+        char* right = power();
+
+        char* t = newtemp();
+        printf("%s = %s ^ %s\n", t, left, right);
+        return t;
+    }
+
+    return left;
+}
+
+/* term -> term * power | term / power */
+char* term() {
+    char* left = power();
+
+    while (1) {
+        skipSpaces();
+
+        if (input[pos] == '*') {
+            pos++;
+            char* right = power();
+
+            char* t = newtemp();
+            printf("%s = %s * %s\n", t, left, right);
+            left = t;
+        }
+        else if (input[pos] == '/') {
+            pos++;
+            char* right = power();
+
+            char* t = newtemp();
+            printf("%s = %s / %s\n", t, left, right);
+            left = t;
+        }
+        else break;
+    }
+
+    return left;
+}
+
+/* expr -> expr + term | expr - term */
+char* expr() {
+    char* left = term();
+
+    while (1) {
+        skipSpaces();
+
+        if (input[pos] == '+') {
+            pos++;
+            char* right = term();
+
+            char* t = newtemp();
+            printf("%s = %s + %s\n", t, left, right);
+            left = t;
+        }
+        else if (input[pos] == '-') {
+            pos++;
+            char* right = term();
+
+            char* t = newtemp();
+            printf("%s = %s - %s\n", t, left, right);
+            left = t;
+        }
+        else break;
+    }
+
+    return left;
+}
+
+/* stmt -> ID = expr ; */
+void parseStatement() {
+    char lhs[20];
+
+    skipSpaces();
+    strcpy(lhs, parseID());
+
+    skipSpaces();
+    if (input[pos] != '=') {
+        printf("Error: Expected '='\n");
+        return;
+    }
+    pos++;
+
+    char* result = expr();
+
+    skipSpaces();
+    if (input[pos] != ';') {
+        printf("Error: Expected ';'\n");
+        return;
+    }
+
+    printf("%s = %s\n", lhs, result);
+}
+
+/* MAIN */
+int main() {
+    printf("Enter expression: ");
+    fgets(input, sizeof(input), stdin);
+
+    parseStatement();
+
+    return 0;
+}
+
+
+
+
+________________________________
+
+
+
+/.l
+%{
+#include "tac.tab.h"
+#include <stdlib.h>
+#include <string.h>
+%}
+
+%%
+
+[0-9]+        { yylval.ival = atoi(yytext); return NUM; }
+[a-zA-Z]+     { strcpy(yylval.sval, yytext); return ID; }
+
+[+\-*/^=(),]  { return yytext[0]; }
+
+[ \t\n]+      ;
+
+.             { printf("Invalid\n"); }
+
+%%
+
+int yywrap() { return 1; }
+
+
+/.y
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int temp = 0;
+
+char* newtemp() {
+    static char t[10];
+    sprintf(t, "t%d", temp++);
+    return t;
+}
+
+void yyerror(char *s) {
+    printf("Error\n");
+}
+
+int yylex();
+%}
+
+%union {
+    int ival;
+    char sval[20];
+}
+
+%token <ival> NUM
+%token <sval> ID
+
+%type <sval> expr term power factor
+
+%%
+
+program : program stmt
+        | stmt
+        ;
+
+stmt : ID '=' expr ',' 
+      { printf("%s = %s\n", $1, $3); }
+     ;
+
+expr : expr '+' term {
+        char *t = newtemp();
+        printf("%s = %s + %s\n", t, $1, $3);
+        strcpy($$, t);
+     }
+     | expr '-' term {
+        char *t = newtemp();
+        printf("%s = %s - %s\n", t, $1, $3);
+        strcpy($$, t);
+     }
+     | term { strcpy($$, $1); }
+     ;
+
+term : term '*' power {
+        char *t = newtemp();
+        printf("%s = %s * %s\n", t, $1, $3);
+        strcpy($$, t);
+     }
+     | term '/' power {
+        char *t = newtemp();
+        printf("%s = %s / %s\n", t, $1, $3);
+        strcpy($$, t);
+     }
+     | power { strcpy($$, $1); }
+     ;
+
+power : factor '^' power {
+        char *t = newtemp();
+        printf("%s = %s ^ %s\n", t, $1, $3);
+        strcpy($$, t);
+     }
+     | factor { strcpy($$, $1); }
+     ;
+
+factor : '(' expr ')' { strcpy($$, $2); }
+       | NUM { sprintf($$, "%d", $1); }
+       | ID  { strcpy($$, $1); }
+       ;
+
+%%
+
+int main() {
+    printf("Enter expressions (end each with ,):\n");
+    yyparse();
+    return 0;
+}
+
+
+
+________ c code
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+char input[100];
+int pos;
+int tempCount = 0;
+
+char* newtemp() {
+    static char temp[10];
+    sprintf(temp, "t%d", tempCount++);
+    return temp;
+}
+
+void skipSpaces() {
+    while (isspace(input[pos])) pos++;
+}
+
+char* parseID() {
+    static char id[20];
+    int i = 0;
+
+    skipSpaces();
+    while (isalnum(input[pos])) {
+        id[i++] = input[pos++];
+    }
+    id[i] = '\0';
+    return id;
+}
+
+char* parseNUM() {
+    static char num[20];
+    int i = 0;
+
+    skipSpaces();
+    while (isdigit(input[pos])) {
+        num[i++] = input[pos++];
+    }
+    num[i] = '\0';
+    return num;
+}
+
+char* expr();
+char* term();
+char* power();
+char* factor();
+
+char* factor() {
+    skipSpaces();
+
+    if (input[pos] == '(') {
+        pos++;
+        char* e = expr();
+        skipSpaces();
+        if (input[pos] == ')') pos++;
+        return e;
+    }
+
+    if (isalpha(input[pos])) return parseID();
+    if (isdigit(input[pos])) return parseNUM();
+
+    return "";
+}
+
+char* power() {
+    char* left = factor();
+    skipSpaces();
+
+    if (input[pos] == '^') {
+        pos++;
+        char* right = power();
+
+        char* t = newtemp();
+        printf("%s = %s ^ %s\n", t, left, right);
+        return t;
+    }
+    return left;
+}
+
+char* term() {
+    char* left = power();
+
+    while (1) {
+        skipSpaces();
+
+        if (input[pos] == '*') {
+            pos++;
+            char* right = power();
+            char* t = newtemp();
+            printf("%s = %s * %s\n", t, left, right);
+            left = t;
+        }
+        else if (input[pos] == '/') {
+            pos++;
+            char* right = power();
+            char* t = newtemp();
+            printf("%s = %s / %s\n", t, left, right);
+            left = t;
+        }
+        else break;
+    }
+    return left;
+}
+
+char* expr() {
+    char* left = term();
+
+    while (1) {
+        skipSpaces();
+
+        if (input[pos] == '+') {
+            pos++;
+            char* right = term();
+            char* t = newtemp();
+            printf("%s = %s + %s\n", t, left, right);
+            left = t;
+        }
+        else if (input[pos] == '-') {
+            pos++;
+            char* right = term();
+            char* t = newtemp();
+            printf("%s = %s - %s\n", t, left, right);
+            left = t;
+        }
+        else break;
+    }
+    return left;
+}
+
+void parseStatement() {
+    char lhs[20];
+
+    skipSpaces();
+    strcpy(lhs, parseID());
+
+    skipSpaces();
+    if (input[pos] != '=') {
+        printf("Error\n");
+        return;
+    }
+    pos++;
+
+    char* result = expr();
+
+    skipSpaces();
+    if (input[pos] != ',') {
+        printf("Error\n");
+        return;
+    }
+
+    printf("%s = %s\n", lhs, result);
+}
+
+int main() {
+    printf("Enter expressions (each ending with ,):\n");
+
+    while (1) {
+        if (!fgets(input, sizeof(input), stdin))
+            break;
+
+        pos = 0;
+        parseStatement();
+    }
+
+    return 0;
+}

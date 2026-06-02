@@ -1,0 +1,1257 @@
+/* LEXICAL ANALYZER IN C
+   Identifies: keywords, identifiers, constants, comments,
+   operators, and special symbols */
+
+#include <stdio.h>
+#include <ctype.h>
+#include <string.h>
+
+/* -------- FUNCTION TO CHECK KEYWORD -------- */
+int isKeyword(char *str) {
+    char *keywords[] = {"int","if","while","for","return"};
+    int n = 5;
+
+    for(int i = 0; i < n; i++) {
+        if(strcmp(str, keywords[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+/* -------- MAIN FUNCTION -------- */
+int main() {
+
+    char input[500];
+
+    printf("Enter code:\n");
+
+    /* Read full line (can extend to multiple lines if needed) */
+    fgets(input, sizeof(input), stdin);
+
+    int i = 0;
+
+    while(input[i] != '\0') {
+
+        /* -------- IGNORE SPACES -------- */
+        if(isspace(input[i])) {
+            i++;
+            continue;
+        }
+
+        /* -------- IDENTIFIER / KEYWORD -------- */
+        if(isalpha(input[i]) || input[i] == '_') {
+
+            char buffer[50];
+            int j = 0;
+
+            while(isalnum(input[i]) || input[i] == '_') {
+                buffer[j++] = input[i++];
+            }
+            buffer[j] = '\0';
+
+            if(isKeyword(buffer))
+                printf("KEYWORD : %s\n", buffer);
+            else
+                printf("IDENTIFIER : %s\n", buffer);
+        }
+
+        /* -------- NUMBER (INT / FLOAT) -------- */
+        else if(isdigit(input[i])) {
+
+            char buffer[50];
+            int j = 0;
+
+            while(isdigit(input[i]) || input[i] == '.') {
+                buffer[j++] = input[i++];
+            }
+            buffer[j] = '\0';
+
+            if(strchr(buffer, '.'))
+                printf("FLOAT CONSTANT : %s\n", buffer);
+            else
+                printf("INTEGER CONSTANT : %s\n", buffer);
+        }
+
+        /* -------- COMMENTS -------- */
+        else if(input[i] == '/' && input[i+1] == '/') {
+
+            printf("COMMENT : ");
+
+            while(input[i] != '\0') {
+                printf("%c", input[i++]);
+            }
+        }
+
+        else if(input[i] == '/' && input[i+1] == '*') {
+
+            printf("COMMENT : ");
+
+            i += 2;
+
+            while(!(input[i] == '*' && input[i+1] == '/') && input[i] != '\0') {
+                printf("%c", input[i++]);
+            }
+
+            i += 2; /* skip closing */
+            printf("\n");
+        }
+
+        /* -------- INCREMENT / DECREMENT -------- */
+        else if(input[i] == '+' && input[i+1] == '+') {
+            printf("INCREMENT OPERATOR : ++\n");
+            i += 2;
+        }
+        else if(input[i] == '-' && input[i+1] == '-') {
+            printf("DECREMENT OPERATOR : --\n");
+            i += 2;
+        }
+
+        /* -------- RELATIONAL OPERATORS -------- */
+        else if((input[i]=='=' && input[i+1]=='=') ||
+                (input[i]=='!' && input[i+1]=='=') ||
+                (input[i]=='<' && input[i+1]=='=') ||
+                (input[i]=='>' && input[i+1]=='=')) {
+
+            printf("RELATIONAL OPERATOR : %c%c\n", input[i], input[i+1]);
+            i += 2;
+        }
+        else if(input[i]=='<' || input[i]=='>' ) {
+            printf("RELATIONAL OPERATOR : %c\n", input[i]);
+            i++;
+        }
+
+        /* -------- LOGICAL OPERATORS -------- */
+        else if(input[i]=='&' && input[i+1]=='&') {
+            printf("LOGICAL OPERATOR : &&\n");
+            i += 2;
+        }
+        else if(input[i]=='|' && input[i+1]=='|') {
+            printf("LOGICAL OPERATOR : ||\n");
+            i += 2;
+        }
+        else if(input[i]=='!') {
+            printf("LOGICAL OPERATOR : !\n");
+            i++;
+        }
+
+        /* -------- ASSIGNMENT OPERATORS -------- */
+        else if((input[i]=='+' || input[i]=='-' || input[i]=='*' || input[i]=='/')
+                && input[i+1]=='=') {
+
+            printf("ASSIGNMENT OPERATOR : %c=\n", input[i]);
+            i += 2;
+        }
+        else if(input[i]=='=') {
+            printf("ASSIGNMENT OPERATOR : =\n");
+            i++;
+        }
+
+        /* -------- ARITHMETIC OPERATORS -------- */
+        else if(input[i]=='+' || input[i]=='-' || input[i]=='*' || input[i]=='/') {
+            printf("ARITHMETIC OPERATOR : %c\n", input[i]);
+            i++;
+        }
+
+        /* -------- SPECIAL SYMBOLS -------- */
+        else if(input[i]==';' || input[i]=='{' || input[i]=='}' ||
+                input[i]=='(' || input[i]==')') {
+
+            printf("SPECIAL SYMBOL : %c\n", input[i]);
+            i++;
+        }
+
+        /* -------- UNKNOWN -------- */
+        else {
+            printf("UNKNOWN : %c\n", input[i]);
+            i++;
+        }
+    }
+
+    return 0;
+}
+
+
+
+
+_____________________________________________-
+
+// final 
+/*
+   LEXICAL ANALYZER USING C
+
+   This program reads source code from a file (input.txt)
+   and identifies tokens such as keywords, identifiers,
+   constants, operators, comments, and special symbols.
+   It scans character by character and classifies them.
+*/
+
+#include <stdio.h>
+#include <ctype.h>
+#include <string.h>
+
+/* Function to check whether a string is a keyword */
+int isKeyword(char *str) {
+    char *keywords[] = {"int","if","while","for","return"};
+    int n = 5;
+
+    for(int i = 0; i < n; i++) {
+        if(strcmp(str, keywords[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+int main() {
+
+    FILE *fp;
+    char input[500];
+
+    /* Open file for reading */
+    fp = fopen("input.txt", "r");
+
+    if(fp == NULL) {
+        printf("Error opening file\n");
+        return 1;
+    }
+
+    printf("Reading from file...\n\n");
+
+    /* Read line by line */
+    while(fgets(input, sizeof(input), fp)) {
+
+        int i = 0;
+
+        while(input[i] != '\0') {
+
+            /* Ignore spaces */
+            if(isspace(input[i])) {
+                i++;
+                continue;
+            }
+
+            /* Identifier or Keyword */
+            if(isalpha(input[i]) || input[i] == '_') {
+
+                char buffer[50];
+                int j = 0;
+
+                while(isalnum(input[i]) || input[i] == '_') {
+                    buffer[j++] = input[i++];
+                }
+                buffer[j] = '\0';
+
+                if(isKeyword(buffer))
+                    printf("KEYWORD : %s\n", buffer);
+                else
+                    printf("IDENTIFIER : %s\n", buffer);
+            }
+
+            /* Numbers (Integer / Float) */
+            else if(isdigit(input[i])) {
+
+                char buffer[50];
+                int j = 0;
+
+                while(isdigit(input[i]) || input[i] == '.') {
+                    buffer[j++] = input[i++];
+                }
+                buffer[j] = '\0';
+
+                if(strchr(buffer, '.'))
+                    printf("FLOAT CONSTANT : %s\n", buffer);
+                else
+                    printf("INTEGER CONSTANT : %s\n", buffer);
+            }
+
+            /* Single-line comment */
+            else if(input[i] == '/' && input[i+1] == '/') {
+                printf("COMMENT : ");
+                while(input[i] != '\0') {
+                    printf("%c", input[i++]);
+                }
+            }
+
+            /* Multi-line comment */
+            else if(input[i] == '/' && input[i+1] == '*') {
+                printf("COMMENT : ");
+                i += 2;
+
+                while(!(input[i] == '*' && input[i+1] == '/') && input[i] != '\0') {
+                    printf("%c", input[i++]);
+                }
+
+                i += 2;
+                printf("\n");
+            }
+
+            /* Increment / Decrement */
+            else if(input[i] == '+' && input[i+1] == '+') {
+                printf("INCREMENT OPERATOR : ++\n");
+                i += 2;
+            }
+            else if(input[i] == '-' && input[i+1] == '-') {
+                printf("DECREMENT OPERATOR : --\n");
+                i += 2;
+            }
+
+            /* Relational operators */
+            else if((input[i]=='=' && input[i+1]=='=') ||
+                    (input[i]=='!' && input[i+1]=='=') ||
+                    (input[i]=='<' && input[i+1]=='=') ||
+                    (input[i]=='>' && input[i+1]=='=')) {
+
+                printf("RELATIONAL OPERATOR : %c%c\n", input[i], input[i+1]);
+                i += 2;
+            }
+            else if(input[i]=='<' || input[i]=='>') {
+                printf("RELATIONAL OPERATOR : %c\n", input[i]);
+                i++;
+            }
+
+            /* Logical operators */
+            else if(input[i]=='&' && input[i+1]=='&') {
+                printf("LOGICAL OPERATOR : &&\n");
+                i += 2;
+            }
+            else if(input[i]=='|' && input[i+1]=='|') {
+                printf("LOGICAL OPERATOR : ||\n");
+                i += 2;
+            }
+            else if(input[i]=='!') {
+                printf("LOGICAL OPERATOR : !\n");
+                i++;
+            }
+
+            /* Assignment operators */
+            else if((input[i]=='+' || input[i]=='-' || input[i]=='*' || input[i]=='/')
+                    && input[i+1]=='=') {
+
+                printf("ASSIGNMENT OPERATOR : %c=\n", input[i]);
+                i += 2;
+            }
+            else if(input[i]=='=') {
+                printf("ASSIGNMENT OPERATOR : =\n");
+                i++;
+            }
+
+            /* Arithmetic operators */
+            else if(input[i]=='+' || input[i]=='-' || input[i]=='*' || input[i]=='/') {
+                printf("ARITHMETIC OPERATOR : %c\n", input[i]);
+                i++;
+            }
+
+            /* Special symbols */
+            else if(input[i]==';' || input[i]=='{' || input[i]=='}' ||
+                    input[i]=='(' || input[i]==')') {
+
+                printf("SPECIAL SYMBOL : %c\n", input[i]);
+                i++;
+            }
+
+            /* Unknown characters */
+            else {
+                printf("UNKNOWN : %c\n", input[i]);
+                i++;
+            }
+        }
+    }
+
+    fclose(fp);
+    return 0;
+}
+
+
+________________________
+
+// with string alkso 
+
+/*
+   LEXICAL ANALYZER USING C
+
+   This program reads source code from a file (input.txt)
+   and identifies tokens such as keywords, identifiers,
+   constants (int, float, string), comments, operators,
+   and special symbols.
+*/
+
+#include <stdio.h>
+#include <ctype.h>
+#include <string.h>
+
+/* -------- CHECK KEYWORD -------- */
+int isKeyword(char *str) {
+    char *keywords[] = {"int","if","while","for","return","float","char","string"};
+    int n = 8;
+
+    for(int i = 0; i < n; i++) {
+        if(strcmp(str, keywords[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+int main() {
+
+    FILE *fp;
+    char input[500];
+
+    fp = fopen("input.txt", "r");
+
+    if(fp == NULL) {
+        printf("Error opening file\n");
+        return 1;
+    }
+
+    printf("Reading from file...\n\n");
+
+    while(fgets(input, sizeof(input), fp)) {
+
+        int i = 0;
+
+        while(input[i] != '\0') {
+
+            /* -------- IGNORE SPACES -------- */
+            if(isspace(input[i])) {
+                i++;
+                continue;
+            }
+
+            /* -------- IDENTIFIER / KEYWORD -------- */
+            if(isalpha(input[i]) || input[i] == '_') {
+
+                char buffer[50];
+                int j = 0;
+
+                while(isalnum(input[i]) || input[i] == '_') {
+                    buffer[j++] = input[i++];
+                }
+                buffer[j] = '\0';
+
+                if(isKeyword(buffer))
+                    printf("KEYWORD : %s\n", buffer);
+                else
+                    printf("IDENTIFIER : %s\n", buffer);
+            }
+
+            /* -------- NUMBER -------- */
+            else if(isdigit(input[i])) {
+
+                char buffer[50];
+                int j = 0;
+
+                while(isdigit(input[i]) || input[i] == '.') {
+                    buffer[j++] = input[i++];
+                }
+                buffer[j] = '\0';
+
+                if(strchr(buffer, '.'))
+                    printf("FLOAT CONSTANT : %s\n", buffer);
+                else
+                    printf("INTEGER CONSTANT : %s\n", buffer);
+            }
+
+            /* -------- STRING CONSTANT -------- */
+            else if(input[i] == '"') {
+
+                char buffer[100];
+                int j = 0;
+
+                buffer[j++] = input[i++];
+
+                while(input[i] != '"' && input[i] != '\0') {
+                    buffer[j++] = input[i++];
+                }
+
+                if(input[i] == '"') {
+                    buffer[j++] = input[i++];
+                }
+
+                buffer[j] = '\0';
+
+                printf("STRING CONSTANT : %s\n", buffer);
+            }
+
+            /* -------- SINGLE LINE COMMENT -------- */
+            else if(input[i] == '/' && input[i+1] == '/') {
+                printf("COMMENT : ");
+                while(input[i] != '\0') {
+                    printf("%c", input[i++]);
+                }
+            }
+
+            /* -------- MULTI LINE COMMENT -------- */
+            else if(input[i] == '/' && input[i+1] == '*') {
+                printf("COMMENT : ");
+                i += 2;
+
+                while(!(input[i] == '*' && input[i+1] == '/') && input[i] != '\0') {
+                    printf("%c", input[i++]);
+                }
+
+                i += 2;
+                printf("\n");
+            }
+
+            /* -------- INC / DEC -------- */
+            else if(input[i] == '+' && input[i+1] == '+') {
+                printf("INCREMENT OPERATOR : ++\n");
+                i += 2;
+            }
+            else if(input[i] == '-' && input[i+1] == '-') {
+                printf("DECREMENT OPERATOR : --\n");
+                i += 2;
+            }
+
+            /* -------- RELATIONAL -------- */
+            else if((input[i]=='=' && input[i+1]=='=') ||
+                    (input[i]=='!' && input[i+1]=='=') ||
+                    (input[i]=='<' && input[i+1]=='=') ||
+                    (input[i]=='>' && input[i+1]=='=')) {
+
+                printf("RELATIONAL OPERATOR : %c%c\n", input[i], input[i+1]);
+                i += 2;
+            }
+            else if(input[i]=='<' || input[i]=='>') {
+                printf("RELATIONAL OPERATOR : %c\n", input[i]);
+                i++;
+            }
+
+            /* -------- LOGICAL -------- */
+            else if(input[i]=='&' && input[i+1]=='&') {
+                printf("LOGICAL OPERATOR : &&\n");
+                i += 2;
+            }
+            else if(input[i]=='|' && input[i+1]=='|') {
+                printf("LOGICAL OPERATOR : ||\n");
+                i += 2;
+            }
+            else if(input[i]=='!') {
+                printf("LOGICAL OPERATOR : !\n");
+                i++;
+            }
+
+            /* -------- ASSIGNMENT -------- */
+            else if((input[i]=='+' || input[i]=='-' || input[i]=='*' || input[i]=='/')
+                    && input[i+1]=='=') {
+
+                printf("ASSIGNMENT OPERATOR : %c=\n", input[i]);
+                i += 2;
+            }
+            else if(input[i]=='=') {
+                printf("ASSIGNMENT OPERATOR : =\n");
+                i++;
+            }
+
+            /* -------- ARITHMETIC -------- */
+            else if(input[i]=='+' || input[i]=='-' || input[i]=='*' || input[i]=='/') {
+                printf("ARITHMETIC OPERATOR : %c\n", input[i]);
+                i++;
+            }
+
+            /* -------- SYMBOLS -------- */
+            else if(input[i]==';' || input[i]=='{' || input[i]=='}' ||
+                    input[i]=='(' || input[i]==')') {
+
+                printf("SPECIAL SYMBOL : %c\n", input[i]);
+                i++;
+            }
+
+            /* -------- UNKNOWN -------- */
+            else {
+                printf("UNKNOWN : %c\n", input[i]);
+                i++;
+            }
+        }
+    }
+
+    fclose(fp);
+    return 0;
+}
+
+'________________________________________________________
+
+
+/*
+   LEXICAL ANALYZER USING C
+
+   This program reads source code from a file (input.txt)
+   and identifies tokens such as keywords, identifiers,
+   constants (int, float, string), comments, operators,
+   and special symbols.
+*/
+
+#include <stdio.h>
+#include <ctype.h>
+#include <string.h>
+
+/* -------- CHECK KEYWORD -------- */
+int isKeyword(char *str) {
+    char *keywords[] = {"int","if","while","for","return","float","char","string"};
+    int n = 8;
+
+    for(int i = 0; i < n; i++) {
+        if(strcmp(str, keywords[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+int main() {
+
+    FILE *fp;
+    char input[500];
+
+    fp = fopen("input.txt", "r");
+
+    if(fp == NULL) {
+        printf("Error opening file\n");
+        return 1;
+    }
+
+    printf("Reading from file...\n\n");
+
+    while(fgets(input, sizeof(input), fp)) {
+
+        int i = 0;
+
+        while(input[i] != '\0') {
+
+            /* -------- IGNORE SPACES -------- */
+            if(isspace(input[i])) {
+                i++;
+                continue;
+            }
+
+            /* -------- IDENTIFIER / KEYWORD -------- */
+            if(isalpha(input[i]) || input[i] == '_') {
+
+                char buffer[50];
+                int j = 0;
+
+                while(isalnum(input[i]) || input[i] == '_') {
+                    buffer[j++] = input[i++];
+                }
+                buffer[j] = '\0';
+
+                if(isKeyword(buffer))
+                    printf("KEYWORD : %s\n", buffer);
+                else
+                    printf("IDENTIFIER : %s\n", buffer);
+            }
+
+            /* -------- NUMBER -------- */
+            else if(isdigit(input[i])) {
+
+                char buffer[50];
+                int j = 0;
+
+                while(isdigit(input[i]) || input[i] == '.') {
+                    buffer[j++] = input[i++];
+                }
+                buffer[j] = '\0';
+
+                if(strchr(buffer, '.'))
+                    printf("FLOAT CONSTANT : %s\n", buffer);
+                else
+                    printf("INTEGER CONSTANT : %s\n", buffer);
+            }
+
+            /* -------- STRING CONSTANT -------- */
+            else if(input[i] == '"') {
+
+                char buffer[100];
+                int j = 0;
+
+                buffer[j++] = input[i++];
+
+                while(input[i] != '"' && input[i] != '\0') {
+                    buffer[j++] = input[i++];
+                }
+
+                if(input[i] == '"') {
+                    buffer[j++] = input[i++];
+                }
+
+                buffer[j] = '\0';
+
+                printf("STRING CONSTANT : %s\n", buffer);
+            }
+
+            /* -------- SINGLE LINE COMMENT -------- */
+            else if(input[i] == '/' && input[i+1] == '/') {
+                printf("COMMENT : ");
+                while(input[i] != '\0') {
+                    printf("%c", input[i++]);
+                }
+            }
+
+            /* -------- MULTI LINE COMMENT -------- */
+            else if(input[i] == '/' && input[i+1] == '*') {
+                printf("COMMENT : ");
+                i += 2;
+
+                while(!(input[i] == '*' && input[i+1] == '/') && input[i] != '\0') {
+                    printf("%c", input[i++]);
+                }
+
+                i += 2;
+                printf("\n");
+            }
+
+            /* -------- INC / DEC -------- */
+            else if(input[i] == '+' && input[i+1] == '+') {
+                printf("INCREMENT OPERATOR : ++\n");
+                i += 2;
+            }
+            else if(input[i] == '-' && input[i+1] == '-') {
+                printf("DECREMENT OPERATOR : --\n");
+                i += 2;
+            }
+
+            /* -------- RELATIONAL -------- */
+            else if((input[i]=='=' && input[i+1]=='=') ||
+                    (input[i]=='!' && input[i+1]=='=') ||
+                    (input[i]=='<' && input[i+1]=='=') ||
+                    (input[i]=='>' && input[i+1]=='=')) {
+
+                printf("RELATIONAL OPERATOR : %c%c\n", input[i], input[i+1]);
+                i += 2;
+            }
+            else if(input[i]=='<' || input[i]=='>') {
+                printf("RELATIONAL OPERATOR : %c\n", input[i]);
+                i++;
+            }
+
+            /* -------- LOGICAL -------- */
+            else if(input[i]=='&' && input[i+1]=='&') {
+                printf("LOGICAL OPERATOR : &&\n");
+                i += 2;
+            }
+            else if(input[i]=='|' && input[i+1]=='|') {
+                printf("LOGICAL OPERATOR : ||\n");
+                i += 2;
+            }
+            else if(input[i]=='!') {
+                printf("LOGICAL OPERATOR : !\n");
+                i++;
+            }
+
+            /* -------- ASSIGNMENT -------- */
+            else if((input[i]=='+' || input[i]=='-' || input[i]=='*' || input[i]=='/')
+                    && input[i+1]=='=') {
+
+                printf("ASSIGNMENT OPERATOR : %c=\n", input[i]);
+                i += 2;
+            }
+            else if(input[i]=='=') {
+                printf("ASSIGNMENT OPERATOR : =\n");
+                i++;
+            }
+
+            /* -------- ARITHMETIC -------- */
+            else if(input[i]=='+' || input[i]=='-' || input[i]=='*' || input[i]=='/') {
+                printf("ARITHMETIC OPERATOR : %c\n", input[i]);
+                i++;
+            }
+
+            /* -------- SYMBOLS -------- */
+            else if(input[i]==';' || input[i]=='{' || input[i]=='}' ||
+                    input[i]=='(' || input[i]==')') {
+
+                printf("SPECIAL SYMBOL : %c\n", input[i]);
+                i++;
+            }
+
+            /* -------- UNKNOWN -------- */
+            else {
+                printf("UNKNOWN : %c\n", input[i]);
+                i++;
+            }
+        }
+    }
+
+    fclose(fp);
+    return 0;
+}
+
+_______________________________________________________________________________
+
+
+
+/*
+   LEXICAL ANALYZER USING C (CONTINUOUS INPUT)
+
+   Takes multiple lines of input from user until "END" is typed.
+   Then analyzes and prints tokens like keywords, identifiers,
+   constants, strings, comments, operators, and symbols.
+*/
+
+#include <stdio.h>
+#include <ctype.h>
+#include <string.h>
+
+/* -------- CHECK KEYWORD -------- */
+int isKeyword(char *str) {
+    char *keywords[] = {"int","if","while","for","return","float","char","string"};
+    int n = 8;
+
+    for(int i = 0; i < n; i++) {
+        if(strcmp(str, keywords[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+/* -------- TOKEN ANALYSIS FUNCTION -------- */
+void analyze(char input[]) {
+
+    int i = 0;
+
+    while(input[i] != '\0') {
+
+        if(isspace(input[i])) {
+            i++;
+            continue;
+        }
+
+        /* IDENTIFIER / KEYWORD */
+        if(isalpha(input[i]) || input[i] == '_') {
+
+            char buffer[50];
+            int j = 0;
+
+            while(isalnum(input[i]) || input[i] == '_') {
+                buffer[j++] = input[i++];
+            }
+            buffer[j] = '\0';
+
+            if(isKeyword(buffer))
+                printf("KEYWORD : %s\n", buffer);
+            else
+                printf("IDENTIFIER : %s\n", buffer);
+        }
+
+        /* NUMBER */
+        else if(isdigit(input[i])) {
+
+            char buffer[50];
+            int j = 0;
+
+            while(isdigit(input[i]) || input[i] == '.') {
+                buffer[j++] = input[i++];
+            }
+            buffer[j] = '\0';
+
+            if(strchr(buffer, '.'))
+                printf("FLOAT CONSTANT : %s\n", buffer);
+            else
+                printf("INTEGER CONSTANT : %s\n", buffer);
+        }
+
+        /* STRING */
+        else if(input[i] == '"') {
+
+            char buffer[100];
+            int j = 0;
+
+            buffer[j++] = input[i++];
+
+            while(input[i] != '"' && input[i] != '\0') {
+                buffer[j++] = input[i++];
+            }
+
+            if(input[i] == '"')
+                buffer[j++] = input[i++];
+
+            buffer[j] = '\0';
+
+            printf("STRING CONSTANT : %s\n", buffer);
+        }
+
+        /* COMMENT */
+        else if(input[i] == '/' && input[i+1] == '/') {
+            printf("COMMENT : ");
+            while(input[i] != '\0') {
+                printf("%c", input[i++]);
+            }
+        }
+
+        /* INC/DEC */
+        else if(input[i] == '+' && input[i+1] == '+') {
+            printf("INCREMENT OPERATOR : ++\n");
+            i += 2;
+        }
+        else if(input[i] == '-' && input[i+1] == '-') {
+            printf("DECREMENT OPERATOR : --\n");
+            i += 2;
+        }
+
+        /* RELATIONAL */
+        else if((input[i]=='=' && input[i+1]=='=') ||
+                (input[i]=='!' && input[i+1]=='=') ||
+                (input[i]=='<' && input[i+1]=='=') ||
+                (input[i]=='>' && input[i+1]=='=')) {
+
+            printf("RELATIONAL OPERATOR : %c%c\n", input[i], input[i+1]);
+            i += 2;
+        }
+        else if(input[i]=='<' || input[i]=='>') {
+            printf("RELATIONAL OPERATOR : %c\n", input[i]);
+            i++;
+        }
+
+        /* LOGICAL */
+        else if(input[i]=='&' && input[i+1]=='&') {
+            printf("LOGICAL OPERATOR : &&\n");
+            i += 2;
+        }
+        else if(input[i]=='|' && input[i+1]=='|') {
+            printf("LOGICAL OPERATOR : ||\n");
+            i += 2;
+        }
+        else if(input[i]=='!') {
+            printf("LOGICAL OPERATOR : !\n");
+            i++;
+        }
+
+        /* ASSIGNMENT */
+        else if((input[i]=='+' || input[i]=='-' || input[i]=='*' || input[i]=='/')
+                && input[i+1]=='=') {
+
+            printf("ASSIGNMENT OPERATOR : %c=\n", input[i]);
+            i += 2;
+        }
+        else if(input[i]=='=') {
+            printf("ASSIGNMENT OPERATOR : =\n");
+            i++;
+        }
+
+        /* ARITHMETIC */
+        else if(input[i]=='+' || input[i]=='-' || input[i]=='*' || input[i]=='/') {
+            printf("ARITHMETIC OPERATOR : %c\n", input[i]);
+            i++;
+        }
+
+        /* SYMBOLS */
+        else if(input[i]==';' || input[i]=='{' || input[i]=='}' ||
+                input[i]=='(' || input[i]==')') {
+
+            printf("SPECIAL SYMBOL : %c\n", input[i]);
+            i++;
+        }
+
+        else {
+            printf("UNKNOWN : %c\n", input[i]);
+            i++;
+        }
+    }
+}
+
+/* -------- MAIN -------- */
+int main() {
+
+    char input[1000] = "";
+    char line[200];
+
+    printf("Enter code (type END to stop):\n");
+
+    while(1) {
+        fgets(line, sizeof(line), stdin);
+
+        /* remove newline */
+        line[strcspn(line, "\n")] = 0;
+
+        /* stop condition */
+        if(strcmp(line, "END") == 0)
+            break;
+
+        strcat(input, line);
+        strcat(input, "\n");
+    }
+
+    printf("\n--- TOKENS ---\n");
+
+    analyze(input);
+
+    return 0;
+}
+
+_______________________________________
+
+// dfa == a*b (ba*b / ab*a)*
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%x S1 S2 S3 S4 S5 DEAD
+
+%%
+
+/* -------- S0 (INITIAL) -------- */
+/* a* part */
+<INITIAL>a { BEGIN INITIAL; }
+<INITIAL>b { BEGIN S1; }
+<INITIAL>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+}
+<INITIAL>. { BEGIN DEAD; }
+
+/* -------- S1 -------- */
+/* after first 'b' → start of (ba*b / ab*a)* */
+<S1>a { BEGIN S2; }   /* possible ab*a */
+<S1>b { BEGIN S3; }   /* possible ba*b */
+<S1>\n {
+    printf("\nRESULT: ACCEPTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S1>. { BEGIN DEAD; }
+
+/* -------- S2 -------- */
+/* handling ab*a */
+<S2>b { BEGIN S2; }   /* b* */
+<S2>a { BEGIN S1; }   /* complete ab*a → back */
+<S2>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S2>. { BEGIN DEAD; }
+
+/* -------- S3 -------- */
+/* handling ba*b */
+<S3>a { BEGIN S3; }   /* a* */
+<S3>b { BEGIN S1; }   /* complete ba*b → back */
+<S3>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S3>. { BEGIN DEAD; }
+
+/* -------- DEAD -------- */
+<DEAD>[^\n]+ { }
+<DEAD>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+
+%%
+
+int main() {
+    printf("Enter string: ");
+    yylex();
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+___________________________________________________
+
+// balanced paranthesis
+S → ( S ) S | ε
+//lex
+
+%{
+#include "y.tab.h"
+%}
+
+%%
+
+"("     { return '('; }
+")"     { return ')'; }
+[^\(\)\n]+   ;   /* ignore other characters */
+\n      { return 0; }
+
+%%
+
+int yywrap() {
+    return 1;
+}
+
+//yacc
+%{
+#include <stdio.h>
+#include <stdlib.h>
+
+int yylex();
+void yyerror(const char *s);
+%}
+
+%%
+
+S : '(' S ')' S
+  | /* empty */
+  ;
+
+%%
+
+void yyerror(const char *s) {
+    printf("\nRESULT: INVALID\n");
+    exit(0);
+}
+
+int main() {
+    printf("Enter expression: ");
+    yyparse();
+    printf("\nRESULT: VALID\n");
+    return 0;
+}
+
+
+// lexical anaylser 
+
+.l
+
+%{
+#include <stdio.h>
+%}
+
+%%
+
+[0-9]+      { printf("NUMBER: %s\n", yytext); }
+[a-zA-Z]+   { printf("WORD: %s\n", yytext); }
+[ \t\n]+    ;   /* ignore spaces */
+.           { printf("SYMBOL: %s\n", yytext); }
+
+%%
+
+int main() {
+    yylex();
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+// another lexical analysier
+
+%{
+#include <stdio.h>
+%}
+
+%%
+
+"hello world"        { printf("STRING: %s\n", yytext); }
+
+/* -------- COMMENTS -------- */
+"//".*               { printf("COMMENT: %s\n", yytext); }
+"/*"([^*]|\*+[^*/])*\*+"/"   { printf("COMMENT: %s\n", yytext); }
+
+/* -------- KEYWORDS -------- */
+"int"|"float"|"if"|"else"|"while"|"return"
+                     { printf("KEYWORD: %s\n", yytext); }
+
+/* -------- ARITHMETIC OPERATORS -------- */
+"+"|"-"|"*"|"/"      { printf("ARITHMETIC OPERATOR: %s\n", yytext); }
+
+/* -------- ASSIGNMENT -------- */
+"="                  { printf("ASSIGNMENT OPERATOR: %s\n", yytext); }
+
+/* -------- OTHER OPERATORS -------- */
+"=="|"!="|"<"|">"|"<="|">="
+                     { printf("OPERATOR: %s\n", yytext); }
+
+/* -------- NUMBERS -------- */
+[0-9]+               { printf("NUMBER: %s\n", yytext); }
+
+/* -------- IDENTIFIERS -------- */
+[a-zA-Z_][a-zA-Z0-9_]*
+                     { printf("IDENTIFIER: %s\n", yytext); }
+
+/* -------- IGNORE -------- */
+[ \t\n]+             ;
+
+/* -------- ANY OTHER -------- */
+.                    { printf("UNKNOWN: %s\n", yytext); }
+
+%%
+
+int main() {
+    printf("Enter input:\n");
+    yylex();
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+________________________________________________________
+
+Cats and dogs are placed in the following order in a single row:
+
+a) The order should start with a sequence of cats followed by a sequence of dogs.
+b) Minimum one dog and one cat should be placed.
+c) Dogs count is always more than cats count.
+
+// .l 
+
+%{
+#include "y.tab.h"
+%}
+
+%%
+
+"c"     { return C; }
+"d"     { return D; }
+\n      { return 0; }
+[ \t]   ;
+.       { return yytext[0]; }
+
+%%
+
+int yywrap() {
+    return 1;
+}
+
+
+// .y
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+
+int yylex();
+void yyerror(const char *s);
+%}
+
+%token C D
+
+%%
+
+S : CSEQ DSEQ { printf("\nVALID STRING\n"); }
+  ;
+
+CSEQ : CSEQ C
+     | C
+     ;
+
+DSEQ : DSEQ D
+     | D D
+     ;
+
+%%
+
+void yyerror(const char *s) {
+    printf("\nINVALID STRING\n");
+    exit(0);
+}
+
+int main() {
+    printf("Enter string (c for cat, d for dog): ");
+    yyparse();
+    return 0;
+}
+
+
+
+//
+yacc -d cd.y
+lex cd.l
+gcc y.tab.c lex.yy.c -o cd
+./cd
+________________________________________________________________
+S → c S d | c d d

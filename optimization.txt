@@ -1,0 +1,792 @@
+// code optimization 
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+/* -- Types -- */
+typedef enum { OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD, OP_NONE } OpType;
+
+typedef struct {
+    char result[64];
+    char arg1[64];
+    char arg2[64];
+    OpType op;
+    int is_const1;
+    int is_const2;
+    double val1;
+    double val2;
+} Expr;
+
+typedef struct {
+    char original[256];
+    char optimized[256];
+    char technique[64];
+    int changed;
+} OptResult;
+
+/* Counters */
+int cnt_cf = 0, cnt_sr = 0, cnt_at = 0;
+
+/* -------- Helpers -------- */
+
+int is_number(const char* s, double* val) {
+    char* end;
+    if (!s || s[0] == '\0') return 0;
+    *val = strtod(s, &end);
+    return (end != s && (*end == '\0' || *end == ';'));
+}
+
+OpType char_to_op(char c) {
+    if (c == '+') return OP_ADD;
+    if (c == '-') return OP_SUB;
+    if (c == '*') return OP_MUL;
+    if (c == '/') return OP_DIV;
+    if (c == '%') return OP_MOD;
+    return OP_NONE;
+}
+
+void trim(char* s) {
+    int i, len;
+    i = 0;
+    while (s[i] == ' ' || s[i] == '\t' || s[i] == '\r') i++;
+    memmove(s, s + i, strlen(s) - i + 1);
+    len = strlen(s);
+    while (len > 0 && (s[len-1] == ' ' || s[len-1] == '\n' || s[len-1] == '\t' || s[len-1] == '\r' || s[len-1] == ';'))
+        s[--len] = '\0';
+}
+
+/* -------- Parser -------- */
+
+int parse_expr(const char* line, Expr* e) {
+    char buf[256];
+    char *eq, *rhs, *op_pos;
+    int i;
+    
+    op_pos = NULL;
+    strncpy(buf, line, 255);
+    buf[255] = '\0';
+    trim(buf);
+
+    eq = strchr(buf, '=');
+    if (!eq) return 0;
+
+    *eq = '\0';
+    strcpy(e->result, buf);
+    trim(e->result);
+
+    rhs = eq + 1;
+    trim(rhs);
+
+    for (i = 0; rhs[i] != '\0'; i++) {
+        if (i > 0 && (rhs[i] == '+' || rhs[i] == '-' || rhs[i] == '*' || rhs[i] == '/' || rhs[i] == '%')) {
+            op_pos = &rhs[i];
+            e->op = char_to_op(rhs[i]);
+            break;
+        }
+    }
+
+    if (op_pos == NULL) {
+        strcpy(e->arg1, rhs);
+        e->arg2[0] = '\0';
+        e->op = OP_NONE;
+    } else {
+        *op_pos = '\0';
+        strcpy(e->arg1, rhs);
+        strcpy(e->arg2, op_pos + 1);
+        trim(e->arg1);
+        trim(e->arg2);
+    }
+
+    e->is_const1 = is_number(e->arg1, &e->val1);
+    e->is_const2 = is_number(e->arg2, &e->val2);
+
+    return 1;
+}
+
+/* -------- Optimizations -------- */
+
+int try_constant_fold(Expr* e, OptResult* r) {
+    double res;
+    if (!e->is_const1 || !e->is_const2 || e->op == OP_NONE) return 0;
+
+    if (e->op == OP_ADD) res = e->val1 + e->val2;
+    else if (e->op == OP_SUB) res = e->val1 - e->val2;
+    else if (e->op == OP_MUL) res = e->val1 * e->val2;
+    else if (e->op == OP_DIV && e->val2 != 0) res = e->val1 / e->val2;
+    else return 0;
+
+    sprintf(r->optimized, "%s = %.0f;", e->result, res);
+    strcpy(r->technique, "Constant Folding");
+    r->changed = 1;
+    cnt_cf++;
+    return 1;
+}
+
+int try_algebraic(Expr* e, OptResult* r) {
+    if (e->op == OP_ADD) {
+        if (e->is_const2 && e->val2 == 0) {
+            sprintf(r->optimized, "%s = %s;", e->result, e->arg1);
+            goto match;
+        }
+        if (e->is_const1 && e->val1 == 0) {
+            sprintf(r->optimized, "%s = %s;", e->result, e->arg2);
+            goto match;
+        }
+    }
+    if (e->op == OP_MUL) {
+        if (e->is_const2 && e->val2 == 1) {
+            sprintf(r->optimized, "%s = %s;", e->result, e->arg1);
+            goto match;
+        }
+        if (e->is_const1 && e->val1 == 1) {
+            sprintf(r->optimized, "%s = %s;", e->result, e->arg2);
+            goto match;
+        }
+    }
+    return 0;
+
+match:
+    strcpy(r->technique, "Algebraic");
+    r->changed = 1;
+    cnt_at++;
+    return 1;
+}
+
+int try_strength(Expr* e, OptResult* r) {
+    double multiplier;
+    char variable[64];
+    char buffer[256];
+    int found, m, k;
+
+    multiplier = 0;
+    found = 0;
+    variable[0] = '\0';
+    buffer[0] = '\0';
+
+    if (e->op == OP_MUL) {
+        if (e->is_const1 && !e->is_const2) {
+            multiplier = e->val1;
+            strcpy(variable, e->arg2);
+            found = 1;
+        } else if (e->is_const2 && !e->is_const1) {
+            multiplier = e->val2;
+            strcpy(variable, e->arg1);
+            found = 1;
+        }
+
+        if (found && multiplier > 1 && multiplier <= 10 && multiplier == (int)multiplier) {
+            m = (int)multiplier;
+            strcpy(buffer, variable);
+            for (k = 1; k < m; k++) {
+                strcat(buffer, " + ");
+                strcat(buffer, variable);
+            }
+            sprintf(r->optimized, "%s = %s;", e->result, buffer);
+            strcpy(r->technique, "Strength Reduction");
+            r->changed = 1;
+            cnt_sr++;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+OptResult optimize(const char* line) {
+    OptResult r;
+    Expr e;
+
+    strcpy(r.original, line);
+    trim(r.original);
+    strcat(r.original, ";");
+    
+    strcpy(r.optimized, r.original);
+    strcpy(r.technique, "None");
+    r.changed = 0;
+
+    if (!parse_expr(line, &e)) return r;
+
+    if (try_algebraic(&e, &r)) return r;
+    if (try_constant_fold(&e, &r)) return r;
+    if (try_strength(&e, &r)) return r;
+
+    return r;
+}
+
+/* -------- MAIN -------- */
+
+int main() {
+    int n, j;
+    char input[256];
+    OptResult r;
+
+    printf("Enter number of statements: ");
+    if (scanf("%d", &n) != 1) return 1;
+    getchar(); 
+
+    for (j = 0; j < n; j++) {
+        printf("\nEnter statement %d: ", j + 1);
+        if (!fgets(input, sizeof(input), stdin)) break;
+
+        r = optimize(input);
+
+        printf("Original:  %s\n", r.original);
+        printf("Optimized: %s\n", r.optimized);
+        printf("Technique: %s\n", r.technique);
+    }
+
+    printf("\n--- Summary ---\n");
+    printf("Constant Folding: %d\n", cnt_cf);
+    printf("Algebraic:        %d\n", cnt_at);
+    printf("Strength Reduc:   %d\n", cnt_sr);
+
+    return 0;
+}
+
+____________________________________________
+
+// opt.l
+
+%{
+#include "opt.tab.h"
+#include <stdlib.h>
+%}
+
+%%
+
+[0-9]+      { yylval.num = atoi(yytext); return NUM; }
+[a-zA-Z]+   { yylval.str = strdup(yytext); return ID; }
+
+"+"         return PLUS;
+"-"         return MINUS;
+"*"         return MUL;
+"/"         return DIV;
+"="         return ASSIGN;
+";"         return SEMI;
+
+[ \t\n]+    ;  // ignore spaces
+
+.           return yytext[0];
+
+%%
+
+//opt.y
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+void yyerror(const char *s);
+int yylex();
+
+typedef struct {
+    char name[50];
+    int value;
+    int is_const;
+} Node;
+
+Node make_const(int val) {
+    Node n;
+    n.value = val;
+    n.is_const = 1;
+    return n;
+}
+
+Node make_var(char* name) {
+    Node n;
+    strcpy(n.name, name);
+    n.is_const = 0;
+    return n;
+}
+
+%}
+
+%union {
+    int num;
+    char* str;
+    Node node;
+}
+
+%token <num> NUM
+%token <str> ID
+%token PLUS MINUS MUL DIV ASSIGN SEMI
+
+%type <node> expr
+
+%%
+
+stmt:
+    ID ASSIGN expr SEMI {
+        if ($3.is_const) {
+            printf("Optimized: %s = %d\n", $1, $3.value);
+            printf("Technique: Constant Folding\n");
+        } else {
+            printf("Optimized: %s = (expression)\n", $1);
+        }
+    }
+;
+
+expr:
+    expr PLUS expr {
+        if ($1.is_const && $3.is_const) {
+            $$ = make_const($1.value + $3.value);
+        } else {
+            $$ = $1;
+            $$.is_const = 0;
+        }
+    }
+  | expr MUL expr {
+        if ($1.is_const && $3.is_const) {
+            $$ = make_const($1.value * $3.value);
+        } else {
+            $$ = $1;
+            $$.is_const = 0;
+        }
+    }
+  | NUM {
+        $$ = make_const($1);
+    }
+  | ID {
+        $$ = make_var($1);
+    }
+;
+
+%%
+
+void yyerror(const char *s) {
+    printf("Error: %s\n", s);
+}
+
+int main() {
+    printf("Enter expression:\n");
+    yyparse();
+    return 0;
+}
+
+
+______________________________________________________
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
+
+int isNumber(char *s) {
+    if (*s == '-') s++;
+    for(int i = 0; s[i]; i++) {
+        if(!isdigit(s[i])) return 0;
+    }
+    return 1;
+}
+
+void trim(char *s) {
+    int i, j = 0;
+    char temp[100];
+    for(i = 0; s[i]; i++) {
+        if(s[i] != ' ')
+            temp[j++] = s[i];
+    }
+    temp[j] = '\0';
+    strcpy(s, temp);
+}
+
+int main() {
+    char input[100];
+    int count = 1;
+
+    while(1) {
+        printf("\nEnter statement %d (type done to stop): ", count);
+        fgets(input, sizeof(input), stdin);
+        input[strcspn(input, "\n")] = 0;
+
+        if(strcmp(input, "done") == 0)
+            break;
+
+        printf("Original:  %s\n", input);
+
+        char lhs[20], expr[100];
+        sscanf(input, "%[^=]=%[^;];", lhs, expr);
+        trim(expr);
+
+        char op1[20], op2[20], op;
+
+        // FIX: include % in parsing
+        if(sscanf(expr, "%[^+*/%^ -]%c%s", op1, &op, op2) == 3) {
+
+            // -------------------------
+            // ✅ 1. CONSTANT FOLDING (HIGHEST PRIORITY)
+            // -------------------------
+            if(isNumber(op1) && isNumber(op2)) {
+                int a = atoi(op1);
+                int b = atoi(op2);
+                int res = 0;
+
+                if(op == '+') res = a + b;
+                else if(op == '-') res = a - b;
+                else if(op == '*') res = a * b;
+                else if(op == '/' && b != 0) res = a / b;
+                else if(op == '%') res = (b != 0) ? a % b : 0;
+                else if(op == '^') {
+                    res = 1;
+                    for(int i=0;i<b;i++) res *= a;
+                }
+
+                printf("Optimized: %s = %d;\n", lhs, res);
+                printf("Technique: Constant Folding\n");
+            }
+
+            // -------------------------
+            // ✅ 2. ALGEBRAIC RULES
+            // -------------------------
+            else if(op == '%') {
+                if(strcmp(op2, "1") == 0 || strcmp(op1, "0") == 0) {
+                    printf("Optimized: %s = 0;\n", lhs);
+                    printf("Technique: Algebraic Simplification\n");
+                } else {
+                    printf("Optimized: %s;\n", input);
+                    printf("Technique: None\n");
+                }
+            }
+
+            else if(op == '^') {
+                if(strcmp(op2, "1") == 0) {
+                    printf("Optimized: %s = %s;\n", lhs, op1);
+                }
+                else if(strcmp(op2, "0") == 0) {
+                    printf("Optimized: %s = 1;\n", lhs);
+                }
+                printf("Technique: Algebraic Simplification\n");
+            }
+
+            else if(op == '/') {
+                if(strcmp(op2, "1") == 0) {
+                    printf("Optimized: %s = %s;\n", lhs, op1);
+                    printf("Technique: Algebraic Simplification\n");
+                }
+                else {
+                    printf("Optimized: %s;\n", input);
+                    printf("Technique: None\n");
+                }
+            }
+
+            else if(op == '*') {
+
+                if(strcmp(op2, "1") == 0) {
+                    printf("Optimized: %s = %s;\n", lhs, op1);
+                    printf("Technique: Algebraic Simplification\n");
+                }
+                else if(strcmp(op1, "1") == 0) {
+                    printf("Optimized: %s = %s;\n", lhs, op2);
+                    printf("Technique: Algebraic Simplification\n");
+                }
+                else if(strcmp(op2, "0") == 0 || strcmp(op1, "0") == 0) {
+                    printf("Optimized: %s = 0;\n", lhs);
+                    printf("Technique: Algebraic Simplification\n");
+                }
+
+                // ✅ Strength Reduction (both sides)
+                else if(isNumber(op2)) {
+                    int n = atoi(op2);
+                    if(n >= 2 && n <= 4) {
+                        printf("Optimized: %s = ", lhs);
+                        for(int i=0;i<n;i++) {
+                            printf("%s", op1);
+                            if(i != n-1) printf(" + ");
+                        }
+                        printf(";\nTechnique: Strength Reduction\n");
+                    } else {
+                        printf("Optimized: %s;\nTechnique: None\n", input);
+                    }
+                }
+
+                else if(isNumber(op1)) {
+                    int n = atoi(op1);
+                    if(n >= 2 && n <= 4) {
+                        printf("Optimized: %s = ", lhs);
+                        for(int i=0;i<n;i++) {
+                            printf("%s", op2);
+                            if(i != n-1) printf(" + ");
+                        }
+                        printf(";\nTechnique: Strength Reduction\n");
+                    } else {
+                        printf("Optimized: %s;\nTechnique: None\n", input);
+                    }
+                }
+
+                else {
+                    printf("Optimized: %s;\nTechnique: None\n", input);
+                }
+            }
+
+            else if(op == '+') {
+                if(strcmp(op2, "0") == 0) {
+                    printf("Optimized: %s = %s;\n", lhs, op1);
+                    printf("Technique: Algebraic Simplification\n");
+                }
+                else if(strcmp(op1, "0") == 0) {
+                    printf("Optimized: %s = %s;\n", lhs, op2);
+                    printf("Technique: Algebraic Simplification\n");
+                }
+                else {
+                    printf("Optimized: %s;\nTechnique: None\n", input);
+                }
+            }
+
+            else {
+                printf("Optimized: %s;\nTechnique: None\n", input);
+            }
+        }
+
+        // -------------------------
+        // ✅ COMPLEX CASE
+        // -------------------------
+        else {
+            int a, b;
+            char var[20];
+
+            if(sscanf(expr, "%d*%d+1*%s", &a, &b, var) == 3) {
+                int res = a * b;
+                printf("Optimized: %s = %d + %s;\n", lhs, res, var);
+                printf("Technique: Constant Folding + Simplification\n");
+            }
+            else {
+                printf("Optimized: %s;\n", input);
+                printf("Technique: None (complex not handled)\n");
+            }
+        }
+
+        count++;
+    }
+
+    return 0;
+}
+
+
+_______________________________________________________________
+
+// .
+
+%{
+#include "opt.tab.h"
+#include <stdlib.h>
+#include <string.h>
+%}
+
+%%
+
+[0-9]+        { yylval.str = strdup(yytext); return NUM; }
+[a-zA-Z]+     { yylval.str = strdup(yytext); return ID; }
+
+"="           return '=';
+"+"           return '+';
+"-"           return '-';
+"*"           return '*';
+"/"           return '/';
+"%"           return '%';
+"^"           return '^';
+";"           return ';';
+
+[ \t\n]+      ;   // ignore spaces
+
+.             return yytext[0];
+
+%%
+
+int yywrap() {
+    return 1;
+}
+
+______
+
+// lex.y
+
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+void yyerror(const char *s);
+int yylex();
+
+int isNumber(char *s) {
+    if (*s == '-') s++;
+    for(int i=0;s[i];i++)
+        if(!isdigit(s[i])) return 0;
+    return 1;
+}
+%}
+
+%union {
+    char *str;
+}
+
+%token <str> NUM ID
+%type <str> expr
+
+%%
+
+stmt:
+    ID '=' expr ';'
+    {
+        printf("Optimized: %s = %s;\n", $1, $3);
+    }
+;
+
+expr:
+      expr '+' expr
+    {
+        if(isNumber($1) && isNumber($3)) {
+            int res = atoi($1) + atoi($3);
+            char *buf = malloc(20);
+            sprintf(buf, "%d", res);
+            $$ = buf;
+            printf("Technique: Constant Folding\n");
+        }
+        else if(strcmp($3,"0")==0) $$ = $1;
+        else if(strcmp($1,"0")==0) $$ = $3;
+        else {
+            char *buf = malloc(50);
+            sprintf(buf,"%s+%s",$1,$3);
+            $$ = buf;
+        }
+    }
+
+    | expr '-' expr
+    {
+        if(isNumber($1) && isNumber($3)) {
+            int res = atoi($1) - atoi($3);
+            char *buf = malloc(20);
+            sprintf(buf, "%d", res);
+            $$ = buf;
+            printf("Technique: Constant Folding\n");
+        } else {
+            char *buf = malloc(50);
+            sprintf(buf,"%s-%s",$1,$3);
+            $$ = buf;
+        }
+    }
+
+    | expr '*' expr
+    {
+        // Constant folding FIRST
+        if(isNumber($1) && isNumber($3)) {
+            int res = atoi($1) * atoi($3);
+            char *buf = malloc(20);
+            sprintf(buf,"%d",res);
+            $$ = buf;
+            printf("Technique: Constant Folding\n");
+        }
+
+        // Algebraic rules
+        else if(strcmp($3,"1")==0) $$ = $1;
+        else if(strcmp($1,"1")==0) $$ = $3;
+        else if(strcmp($3,"0")==0 || strcmp($1,"0")==0) $$ = "0";
+
+        // Strength Reduction (both sides)
+        else if(isNumber($3)) {
+            int n = atoi($3);
+            if(n>=2 && n<=4) {
+                char *buf = malloc(100);
+                buf[0]='\0';
+                for(int i=0;i<n;i++) {
+                    strcat(buf,$1);
+                    if(i!=n-1) strcat(buf,"+");
+                }
+                $$ = buf;
+                printf("Technique: Strength Reduction\n");
+            } else {
+                char *buf = malloc(50);
+                sprintf(buf,"%s*%s",$1,$3);
+                $$ = buf;
+            }
+        }
+        else if(isNumber($1)) {
+            int n = atoi($1);
+            if(n>=2 && n<=4) {
+                char *buf = malloc(100);
+                buf[0]='\0';
+                for(int i=0;i<n;i++) {
+                    strcat(buf,$3);
+                    if(i!=n-1) strcat(buf,"+");
+                }
+                $$ = buf;
+                printf("Technique: Strength Reduction\n");
+            } else {
+                char *buf = malloc(50);
+                sprintf(buf,"%s*%s",$1,$3);
+                $$ = buf;
+            }
+        }
+
+        else {
+            char *buf = malloc(50);
+            sprintf(buf,"%s*%s",$1,$3);
+            $$ = buf;
+        }
+    }
+
+    | expr '/' expr
+    {
+        if(isNumber($1) && isNumber($3) && atoi($3)!=0) {
+            int res = atoi($1)/atoi($3);
+            char *buf = malloc(20);
+            sprintf(buf,"%d",res);
+            $$ = buf;
+            printf("Technique: Constant Folding\n");
+        }
+        else if(strcmp($3,"1")==0) $$ = $1;
+        else {
+            char *buf = malloc(50);
+            sprintf(buf,"%s/%s",$1,$3);
+            $$ = buf;
+        }
+    }
+
+    | expr '%' expr
+    {
+        if(isNumber($1) && isNumber($3) && atoi($3)!=0) {
+            int res = atoi($1)%atoi($3);
+            char *buf = malloc(20);
+            sprintf(buf,"%d",res);
+            $$ = buf;
+            printf("Technique: Constant Folding\n");
+        }
+        else if(strcmp($3,"1")==0 || strcmp($1,"0")==0) $$ = "0";
+        else {
+            char *buf = malloc(50);
+            sprintf(buf,"%s%%%s",$1,$3);
+            $$ = buf;
+        }
+    }
+
+    | expr '^' expr
+    {
+        if(strcmp($3,"1")==0) $$ = $1;
+        else if(strcmp($3,"0")==0) $$ = "1";
+        else {
+            char *buf = malloc(50);
+            sprintf(buf,"%s^%s",$1,$3);
+            $$ = buf;
+        }
+    }
+
+    | NUM { $$ = $1; }
+    | ID  { $$ = $1; }
+
+;
+
+%%
+
+void yyerror(const char *s) {
+    printf("Error: %s\n", s);
+}
+
+int main() {
+    printf("Enter expressions (Ctrl+D to stop):\n");
+    yyparse();
+    return 0;
+}

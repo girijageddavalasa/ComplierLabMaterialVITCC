@@ -1,0 +1,60 @@
+#include<stdio.h>
+int main() {
+	int ns,na,nf;
+	int i,j;
+	printf("Enter number of states:");
+	scanf("%d",&ns);
+	printf("Enter number of input symbols:");
+	scanf("%d",&na);
+	char alpha[na];
+	printf("Enter input symbols:\n");
+	for(i=0; i<na; i++) {
+		scanf(" %c",&alpha[i]);
+	}
+	int trans[ns][na];
+	printf("Enter transition table (next states):\n");
+	for(i=0; i<ns; i++) {
+		for(j=0; j<na; j++) {
+			scanf("%d",&trans[i][j]);
+		}
+	}
+	int final[ns];
+	for(i=0; i<ns; i++)
+		final[i]=0;
+	printf("Enter number of final states:");
+	scanf("%d",&nf);
+	printf("Enter final states:\n");
+	for(i=0; i<nf; i++) {
+		int x;
+		scanf("%d",&x);
+		final[x]=1;
+	}
+	int dead = ns - 1; /* last state is treated as dead state */
+	/* OUTPUT GRAMMAR */
+	printf("\nRegular Grammar G = (N, T, P, S)\n");
+	printf("N = { ");
+	for(i=0; i<ns; i++) {
+		if(i != dead)
+			printf("q%d ",i);
+	}
+	printf("}\n");
+	printf("T = { ");
+	for(i=0; i<na; i++) {
+		printf("%c ",alpha[i]);
+	}
+	printf("}\n");
+	printf("S = q0\n");
+	printf("P:\n");
+	for(i=0; i<ns; i++) {
+		if(i == dead) continue; /* skip dead state */
+		for(j=0; j<na; j++) {
+			if(trans[i][j] != dead) {
+				printf("q%d -> %cq%d\n",i,alpha[j],trans[i][j]);
+			}
+		}
+		if(final[i]) {
+			printf("q%d -> E\n",i);
+		}
+	}
+	return 0;
+}

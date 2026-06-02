@@ -1,0 +1,670 @@
+// left recursion + LR parsing
+
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#define MAX 50
+#define NTMAX 20
+char prod[MAX][MAX], g[MAX][MAX], NT[NTMAX], TR[MAX];
+char FIRST[NTMAX][MAX], FOLLOW[NTMAX][MAX], table[NTMAX][MAX][MAX];
+int nProd, nG = 0, nNT = 0, nT = 0;
+/* ---------- Utility Functions ---------- */
+int isNT(char c) {
+	int i;
+	for (i = 0; i < nNT; i++)
+		if (NT[i] == c) return 1;
+	return 0;
+}
+int ntIndex(char c) {
+	int i;
+	for (i = 0; i < nNT; i++)
+		if (NT[i] == c) return i;
+	return -1;
+}
+int tIndex(char c) {
+	int i;
+	for (i = 0; i < nT; i++)
+		if (TR[i] == c) return i;
+	return -1;
+}
+void add(char *set, char c) {
+	int l;
+	if (c == '\0') return;
+	if (!strchr(set, c)) {
+		l = strlen(set);
+		set[l] = c;
+		set[l + 1] = '\0';
+	}
+}
+/* ---------- Left Recursion Removal ---------- */
+void removeLR() {
+	int used[256] = {0};
+	int i, j, a, b;
+	char A, Ap;
+	char alpha[10][MAX], beta[10][MAX];
+	for (i = 0; i < nProd; i++) {
+		A = prod[i][0];
+		if (used[(int)A]) continue;
+		used[(int)A] = 1;
+		a = b = 0;
+		for (j = 0; j < nProd; j++) {
+			if (prod[j][0] == A) {
+				if (prod[j][3] == A)
+					strcpy(alpha[a++], prod[j] + 4);
+				else
+					strcpy(beta[b++], prod[j] + 3);
+			}
+		}
+		if (a > 0) {
+			Ap = tolower(A);
+			NT[nNT++] = A;
+			NT[nNT++] = Ap;
+			for (j = 0; j < b; j++)
+				sprintf(g[nG++], "%c->%s%c", A, beta[j], Ap);
+			for (j = 0; j < a; j++)
+				sprintf(g[nG++], "%c->%s%c", Ap, alpha[j], Ap);
+			sprintf(g[nG++], "%c->#", Ap);
+		} else {
+			NT[nNT++] = A;
+			for (j = 0; j < b; j++)
+				sprintf(g[nG++], "%c->%s", A, beta[j]);
+		}
+	}
+}
+/* ---------- Find Terminals ---------- */
+void findTerminals() {
+	int i, j;
+	for (i = 0; i < nG; i++)
+		for (j = 3; g[i][j]; j++)
+			if (!isNT(g[i][j]) && g[i][j] != '#' && !strchr(TR, g[i][j]))
+				add(TR, g[i][j]);
+	add(TR, '$');
+	nT = strlen(TR);
+}
+/* ---------- FIRST & FOLLOW ---------- */
+void firstOfString(char *s, char *out) {
+	int i, idx, j;
+	if (s[0] == '#') {
+		add(out, '#');
+		return;
+	}
+	for (i = 0; s[i]; i++) {
+		if (!isNT(s[i])) {
+			add(out, s[i]);
+			return;
+		}
+		idx = ntIndex(s[i]);
+		for (j = 0; FIRST[idx][j]; j++)
+			if (FIRST[idx][j] != '#')
+				add(out, FIRST[idx][j]);
+		if (!strchr(FIRST[idx], '#'))
+			return;
+	}
+	add(out, '#');
+}
+void computeFIRST() {
+	int changed = 1;
+	int i, A, j;
+	char temp[MAX];
+	while (changed) {
+		changed = 0;
+		for (i = 0; i < nG; i++) {
+			A = ntIndex(g[i][0]);
+			temp[0] = '\0';
+			firstOfString(g[i] + 3, temp);
+			for (j = 0; temp[j]; j++)
+				if (!strchr(FIRST[A], temp[j])) {
+					add(FIRST[A], temp[j]);
+					changed = 1;
+				}
+		}
+	}
+}
+void computeFOLLOW() {
+	int changed = 1;
+	int i, j, k, Aidx, Bidx;
+	char *rhs, temp[MAX];
+	add(FOLLOW[0], '$');
+	while (changed) {
+		changed = 0;
+		for (i = 0; i < nG; i++) {
+			Aidx = ntIndex(g[i][0]);
+			rhs = g[i] + 3;
+			for (j = 0; rhs[j]; j++) {
+				if (isNT(rhs[j])) {
+					Bidx = ntIndex(rhs[j]);
+					temp[0] = '\0';
+					firstOfString(rhs + j + 1, temp);
+					for (k = 0; temp[k]; k++)
+						if (temp[k] != '#' && !strchr(FOLLOW[Bidx], temp[k])) {
+							add(FOLLOW[Bidx], temp[k]);
+							changed = 1;
+						}
+					if (!rhs[j + 1] || strchr(temp, '#'))
+						for (k = 0; FOLLOW[Aidx][k]; k++)
+							if (!strchr(FOLLOW[Bidx], FOLLOW[Aidx][k])) {
+								add(FOLLOW[Bidx], FOLLOW[Aidx][k]);
+								changed = 1;
+							}
+				}
+			}
+		}
+	}
+}
+/* ---------- Parsing Table ---------- */
+void computeTable() {
+	int i, j, k, Aidx;
+	char temp[MAX];
+	for (i = 0; i < nG; i++) {
+		Aidx = ntIndex(g[i][0]);
+		temp[0] = '\0';
+		firstOfString(g[i] + 3, temp);
+		for (j = 0; temp[j]; j++) {
+			if (temp[j] != '#')
+				strcpy(table[Aidx][tIndex(temp[j])], g[i]);
+			else
+				for (k = 0; FOLLOW[Aidx][k]; k++)
+					strcpy(table[Aidx][tIndex(FOLLOW[Aidx][k])], g[i]);
+		}
+	}
+}
+int main() {
+	int i, j;
+	printf("Enter number of productions: ");
+	scanf("%d", &nProd);
+	printf("Enter productions:\n");
+	for (i = 0; i < nProd; i++)
+		scanf("%s", prod[i]);
+	removeLR();
+	findTerminals();
+	computeFIRST();
+	computeFOLLOW();
+	computeTable();
+	printf("\nGrammar After LR Removal:\n");
+	for (i = 0; i < nG; i++)
+		printf("%s\n", g[i]);
+	printf("\nNT\tFIRST\tFOLLOW\n");
+	for (i = 0; i < nNT; i++)
+		printf("%c\t{%s}\t{%s}\n", NT[i], FIRST[i], FOLLOW[i]);
+	printf("\nParsing Table:\n\t");
+	for (i = 0; i < nT; i++)
+		printf("%c\t", TR[i]);
+	printf("\n");
+	for (i = 0; i < nNT; i++) {
+		printf("%c\t", NT[i]);
+		for (j = 0; j < nT; j++)
+			printf("%s\t", strlen(table[i][j]) ? table[i][j] : "-");
+		printf("\n");
+	}
+	return 0;
+}
+
+
+________________________________________________
+
+// without LR 
+
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX 50
+#define NTMAX 20
+
+char prod[MAX][MAX], g[MAX][MAX], NT[NTMAX], TR[MAX];
+char FIRST[NTMAX][MAX], FOLLOW[NTMAX][MAX], table[NTMAX][MAX][MAX];
+
+int nProd, nG = 0, nNT = 0, nT = 0;
+
+/* ---------- Utility Functions ---------- */
+int isNT(char c) {
+	int i;
+	for (i = 0; i < nNT; i++)
+		if (NT[i] == c) return 1;
+	return 0;
+}
+
+int ntIndex(char c) {
+	int i;
+	for (i = 0; i < nNT; i++)
+		if (NT[i] == c) return i;
+	return -1;
+}
+
+int tIndex(char c) {
+	int i;
+	for (i = 0; i < nT; i++)
+		if (TR[i] == c) return i;
+	return -1;
+}
+
+void add(char *set, char c) {
+	int l;
+	if (c == '\0') return;
+	if (!strchr(set, c)) {
+		l = strlen(set);
+		set[l] = c;
+		set[l + 1] = '\0';
+	}
+}
+
+/* ---------- Find Terminals ---------- */
+void findTerminals() {
+	int i, j;
+	for (i = 0; i < nG; i++)
+		for (j = 3; g[i][j]; j++)
+			if (!isNT(g[i][j]) && g[i][j] != '#' && !strchr(TR, g[i][j]))
+				add(TR, g[i][j]);
+
+	add(TR, '$');
+	nT = strlen(TR);
+}
+
+/* ---------- FIRST & FOLLOW ---------- */
+void firstOfString(char *s, char *out) {
+	int i, idx, j;
+
+	if (s[0] == '#') {
+		add(out, '#');
+		return;
+	}
+
+	for (i = 0; s[i]; i++) {
+		if (!isNT(s[i])) {
+			add(out, s[i]);
+			return;
+		}
+		idx = ntIndex(s[i]);
+		for (j = 0; FIRST[idx][j]; j++)
+			if (FIRST[idx][j] != '#')
+				add(out, FIRST[idx][j]);
+
+		if (!strchr(FIRST[idx], '#'))
+			return;
+	}
+	add(out, '#');
+}
+
+void computeFIRST() {
+	int changed = 1, i, A, j;
+	char temp[MAX];
+
+	while (changed) {
+		changed = 0;
+		for (i = 0; i < nG; i++) {
+			A = ntIndex(g[i][0]);
+			temp[0] = '\0';
+			firstOfString(g[i] + 3, temp);
+
+			for (j = 0; temp[j]; j++)
+				if (!strchr(FIRST[A], temp[j])) {
+					add(FIRST[A], temp[j]);
+					changed = 1;
+				}
+		}
+	}
+}
+
+void computeFOLLOW() {
+	int changed = 1, i, j, k, Aidx, Bidx;
+	char *rhs, temp[MAX];
+
+	add(FOLLOW[0], '$');
+
+	while (changed) {
+		changed = 0;
+		for (i = 0; i < nG; i++) {
+			Aidx = ntIndex(g[i][0]);
+			rhs = g[i] + 3;
+
+			for (j = 0; rhs[j]; j++) {
+				if (isNT(rhs[j])) {
+					Bidx = ntIndex(rhs[j]);
+					temp[0] = '\0';
+					firstOfString(rhs + j + 1, temp);
+
+					for (k = 0; temp[k]; k++)
+						if (temp[k] != '#' && !strchr(FOLLOW[Bidx], temp[k])) {
+							add(FOLLOW[Bidx], temp[k]);
+							changed = 1;
+						}
+
+					if (!rhs[j + 1] || strchr(temp, '#'))
+						for (k = 0; FOLLOW[Aidx][k]; k++)
+							if (!strchr(FOLLOW[Bidx], FOLLOW[Aidx][k])) {
+								add(FOLLOW[Bidx], FOLLOW[Aidx][k]);
+								changed = 1;
+							}
+				}
+			}
+		}
+	}
+}
+
+/* ---------- Parsing Table ---------- */
+void computeTable() {
+	int i, j, k, Aidx;
+	char temp[MAX];
+
+	for (i = 0; i < nG; i++) {
+		Aidx = ntIndex(g[i][0]);
+		temp[0] = '\0';
+		firstOfString(g[i] + 3, temp);
+
+		for (j = 0; temp[j]; j++) {
+			if (temp[j] != '#')
+				strcpy(table[Aidx][tIndex(temp[j])], g[i]);
+			else
+				for (k = 0; FOLLOW[Aidx][k]; k++)
+					strcpy(table[Aidx][tIndex(FOLLOW[Aidx][k])], g[i]);
+		}
+	}
+}
+
+int main() {
+	int i, j;
+
+	printf("Enter number of productions: ");
+	scanf("%d", &nProd);
+
+	printf("Enter productions:\n");
+	for (i = 0; i < nProd; i++) {
+		scanf("%s", prod[i]);
+
+		/*add NT manually (since removeLR is not used) */
+		if (!isNT(prod[i][0]))
+			NT[nNT++] = prod[i][0];
+
+		/* py productions directly to g */
+		strcpy(g[nG++], prod[i]);
+	}
+
+	// removeLR();
+
+	findTerminals();
+	computeFIRST();
+	computeFOLLOW();
+	computeTable();
+
+	printf("\nGrammar Used:\n");
+	for (i = 0; i < nG; i++)
+		printf("%s\n", g[i]);
+
+	printf("\nNT\tFIRST\tFOLLOW\n");
+	for (i = 0; i < nNT; i++)
+		printf("%c\t{%s}\t{%s}\n", NT[i], FIRST[i], FOLLOW[i]);
+
+	printf("\nParsing Table:\n\t");
+	for (i = 0; i < nT; i++)
+		printf("%c\t", TR[i]);
+	printf("\n");
+
+	for (i = 0; i < nNT; i++) {
+		printf("%c\t", NT[i]);
+		for (j = 0; j < nT; j++)
+			printf("%s\t", strlen(table[i][j]) ? table[i][j] : "-");
+		printf("\n");
+	}
+
+	return 0;
+}
+
+_________________________________________________________________
+
+// lr with string 
+
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX 50
+#define NTMAX 20
+
+char prod[MAX][MAX], g[MAX][MAX], NT[NTMAX], TR[MAX];
+char FIRST[NTMAX][MAX], FOLLOW[NTMAX][MAX], table[NTMAX][MAX][MAX];
+
+int nProd, nG = 0, nNT = 0, nT = 0;
+
+/* ---------- Utility ---------- */
+int isNT(char c) {
+	int i;
+	for (i = 0; i < nNT; i++)
+		if (NT[i] == c) return 1;
+	return 0;
+}
+
+int ntIndex(char c) {
+	int i;
+	for (i = 0; i < nNT; i++)
+		if (NT[i] == c) return i;
+	return -1;
+}
+
+int tIndex(char c) {
+	int i;
+	for (i = 0; i < nT; i++)
+		if (TR[i] == c) return i;
+	return -1;
+}
+
+void add(char *set, char c) {
+	int l;
+	if (c == '\0') return;
+	if (!strchr(set, c)) {
+		l = strlen(set);
+		set[l] = c;
+		set[l + 1] = '\0';
+	}
+}
+
+/* ---------- Find Terminals ---------- */
+void findTerminals() {
+	int i, j;
+	for (i = 0; i < nG; i++)
+		for (j = 3; g[i][j]; j++)
+			if (!isNT(g[i][j]) && g[i][j] != '#' && !strchr(TR, g[i][j]))
+				add(TR, g[i][j]);
+
+	add(TR, '$');
+	nT = strlen(TR);
+}
+
+/* ---------- FIRST ---------- */
+void firstOfString(char *s, char *out) {
+	int i, idx, j;
+
+	if (s[0] == '#') {
+		add(out, '#');
+		return;
+	}
+
+	for (i = 0; s[i]; i++) {
+		if (!isNT(s[i])) {
+			add(out, s[i]);
+			return;
+		}
+		idx = ntIndex(s[i]);
+		for (j = 0; FIRST[idx][j]; j++)
+			if (FIRST[idx][j] != '#')
+				add(out, FIRST[idx][j]);
+
+		if (!strchr(FIRST[idx], '#'))
+			return;
+	}
+	add(out, '#');
+}
+
+void computeFIRST() {
+	int changed = 1, i, A, j;
+	char temp[MAX];
+
+	while (changed) {
+		changed = 0;
+		for (i = 0; i < nG; i++) {
+			A = ntIndex(g[i][0]);
+			temp[0] = '\0';
+			firstOfString(g[i] + 3, temp);
+
+			for (j = 0; temp[j]; j++)
+				if (!strchr(FIRST[A], temp[j])) {
+					add(FIRST[A], temp[j]);
+					changed = 1;
+				}
+		}
+	}
+}
+
+/* ---------- FOLLOW ---------- */
+void computeFOLLOW() {
+	int changed = 1, i, j, k, Aidx, Bidx;
+	char *rhs, temp[MAX];
+
+	add(FOLLOW[0], '$');
+
+	while (changed) {
+		changed = 0;
+		for (i = 0; i < nG; i++) {
+			Aidx = ntIndex(g[i][0]);
+			rhs = g[i] + 3;
+
+			for (j = 0; rhs[j]; j++) {
+				if (isNT(rhs[j])) {
+					Bidx = ntIndex(rhs[j]);
+					temp[0] = '\0';
+					firstOfString(rhs + j + 1, temp);
+
+					for (k = 0; temp[k]; k++)
+						if (temp[k] != '#' && !strchr(FOLLOW[Bidx], temp[k])) {
+							add(FOLLOW[Bidx], temp[k]);
+							changed = 1;
+						}
+
+					if (!rhs[j + 1] || strchr(temp, '#'))
+						for (k = 0; FOLLOW[Aidx][k]; k++)
+							if (!strchr(FOLLOW[Bidx], FOLLOW[Aidx][k])) {
+								add(FOLLOW[Bidx], FOLLOW[Aidx][k]);
+								changed = 1;
+							}
+				}
+			}
+		}
+	}
+}
+
+/* ---------- Parsing Table ---------- */
+void computeTable() {
+	int i, j, k, Aidx;
+	char temp[MAX];
+
+	for (i = 0; i < nG; i++) {
+		Aidx = ntIndex(g[i][0]);
+		temp[0] = '\0';
+		firstOfString(g[i] + 3, temp);
+
+		for (j = 0; temp[j]; j++) {
+			if (temp[j] != '#')
+				strcpy(table[Aidx][tIndex(temp[j])], g[i]);
+			else
+				for (k = 0; FOLLOW[Aidx][k]; k++)
+					strcpy(table[Aidx][tIndex(FOLLOW[Aidx][k])], g[i]);
+		}
+	}
+}
+
+/* ---------- Predictive Parsing ---------- */
+void predictiveParse(char *input) {
+	char stack[100];
+	int top = -1, ip = 0, i;
+	char X, a, rhs[MAX];
+
+	stack[++top] = '$';
+	stack[++top] = NT[0];
+
+	printf("\nStack\tInput\tAction\n");
+
+	while (top >= 0) {
+		for (i = top; i >= 0; i--)
+			printf("%c", stack[i]);
+
+		printf("\t%s\t", input + ip);
+
+		X = stack[top];
+		a = input[ip];
+
+		if (!isNT(X)) {
+			if (X == a) {
+				if (X == '$') {
+					printf("Accept\n");
+					return;
+				}
+				printf("Match %c\n", a);
+				top--;
+				ip++;
+			} else {
+				printf("Reject\n");
+				return;
+			}
+		} else {
+			int r = ntIndex(X);
+			int c = tIndex(a);
+
+			if (r == -1 || c == -1 || strlen(table[r][c]) == 0) {
+				printf("Reject\n");
+				return;
+			}
+
+			printf("Output %s\n", table[r][c]);
+
+			top--;
+			strcpy(rhs, table[r][c] + 3);
+
+			for (i = strlen(rhs) - 1; i >= 0; i--)
+				if (rhs[i] != '#')
+					stack[++top] = rhs[i];
+		}
+	}
+}
+
+/* ---------- MAIN ---------- */
+int main() {
+	int i, j;
+	char input[50];
+
+	printf("Enter number of productions: ");
+	scanf("%d", &nProd);
+
+	printf("Enter productions:\n");
+	for (i = 0; i < nProd; i++) {
+		scanf("%s", prod[i]);
+
+		if (!isNT(prod[i][0]))
+			NT[nNT++] = prod[i][0];
+
+		strcpy(g[nG++], prod[i]);
+	}
+
+	findTerminals();
+	computeFIRST();
+	computeFOLLOW();
+	computeTable();
+
+	printf("\nParsing Table:\n\t");
+	for (i = 0; i < nT; i++)
+		printf("%c\t", TR[i]);
+	printf("\n");
+
+	for (i = 0; i < nNT; i++) {
+		printf("%c\t", NT[i]);
+		for (j = 0; j < nT; j++)
+			printf("%s\t", strlen(table[i][j]) ? table[i][j] : "-");
+		printf("\n");
+	}
+
+	printf("\nEnter input string (end with $): ");
+	scanf("%s", input);
+
+	predictiveParse(input);
+
+	return 0;
+}
+______________________________________________________________________________________________________

@@ -1,0 +1,268 @@
+// 8086
+
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX 100
+
+typedef struct {
+    char res[10], a1[10], op, a2[10];
+    int isBinary;
+} TAC;
+
+TAC code[MAX];
+int count = 0;
+
+/* Remove spaces */
+void trim(char *s) {
+    int i = 0, j = 0;
+    while (s[i]) {
+        if (s[i] != ' ' && s[i] != '\n')
+            s[j++] = s[i];
+        i++;
+    }
+    s[j] = '\0';
+}
+
+/* Remove semicolon at end */
+void removeSemicolon(char *s) {
+    int len = strlen(s);
+    if (len > 0 && s[len - 1] == ';')
+        s[len - 1] = '\0';
+}
+
+/* Check if number */
+int isNum(char *s) {
+    for (int i = 0; s[i]; i++)
+        if (!isdigit(s[i])) return 0;
+    return 1;
+}
+
+/* Parse line */
+int parse(char *line, TAC *t) {
+    trim(line);
+    removeSemicolon(line);
+
+    char *eq = strchr(line, '=');
+    if (!eq) return 0;
+
+    *eq = '\0';
+    strcpy(t->res, line);
+
+    char *rhs = eq + 1;
+
+    if (strchr(rhs, '+') || strchr(rhs, '-') ||
+        strchr(rhs, '*') || strchr(rhs, '/')) {
+
+        sscanf(rhs, "%[^+-*/]%c%[^+-*/]", t->a1, &t->op, t->a2);
+        t->isBinary = 1;
+    } else {
+        strcpy(t->a1, rhs);
+        t->isBinary = 0;
+    }
+    return 1;
+}
+
+/* Load value */
+void load(char *reg, char *val) {
+    if (isNum(val))
+        printf("MOV %s, %s\n", reg, val);
+    else
+        printf("MOV %s, [%s]\n", reg, val);
+}
+
+/* Generate assembly */
+void generate(TAC *t) {
+    printf("\n; %s = %s %c %s\n", t->res, t->a1, t->op, t->a2);
+
+    if (!t->isBinary) {
+        load("AX", t->a1);
+        printf("MOV [%s], AX\n", t->res);
+        return;
+    }
+
+    load("AX", t->a1);
+
+    if (t->op == '+') {
+        if (isNum(t->a2))
+            printf("ADD AX, %s\n", t->a2);
+        else
+            printf("ADD AX, [%s]\n", t->a2);
+    }
+
+    else if (t->op == '-') {
+        if (isNum(t->a2))
+            printf("SUB AX, %s\n", t->a2);
+        else
+            printf("SUB AX, [%s]\n", t->a2);
+    }
+
+    else if (t->op == '*') {
+        if (isNum(t->a2))
+            printf("MOV BX, %s\n", t->a2);
+        else
+            printf("MOV BX, [%s]\n", t->a2);
+
+        printf("MUL BX\n");
+    }
+
+    else if (t->op == '/') {
+        printf("XOR DX, DX\n");
+
+        if (isNum(t->a2))
+            printf("MOV BX, %s\n", t->a2);
+        else
+            printf("MOV BX, [%s]\n", t->a2);
+
+        printf("DIV BX\n");
+    }
+
+    printf("MOV [%s], AX\n", t->res);
+}
+
+/* MAIN */
+int main() {
+    char line[100];
+
+    printf("Enter TAC (type done to stop):\n");
+
+    while (1) {
+        printf(">> ");
+        fgets(line, sizeof(line), stdin);
+
+        if (strncmp(line, "done", 4) == 0) break;
+
+        if (parse(line, &code[count]))
+            count++;
+        else
+            printf("Invalid input\n");
+    }
+
+    printf("\n===== Assembly =====\n");
+
+    for (int i = 0; i < count; i++)
+        generate(&code[i]);
+
+    return 0;
+}
+
+______________________________________________________________________
+
+// gen.l
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+
+void yyerror(const char *s);
+int yylex();
+%}
+
+%token ID NUM
+
+%%
+
+stmt:
+    ID '=' expr ';' {
+        printf("MOV AX, [%s]\n", $3);
+        printf("MOV [%s], AX\n\n", $1);
+    }
+;
+
+expr:
+      ID '+' ID {
+          printf("MOV AX, [%s]\n", $1);
+          printf("ADD AX, [%s]\n", $3);
+          $$ = $1;
+      }
+    | ID '-' ID {
+          printf("MOV AX, [%s]\n", $1);
+          printf("SUB AX, [%s]\n", $3);
+          $$ = $1;
+      }
+    | ID '*' ID {
+          printf("MOV AX, [%s]\n", $1);
+          printf("MOV BX, [%s]\n", $3);
+          printf("MUL BX\n");
+          $$ = $1;
+      }
+    | ID '/' ID {
+          printf("MOV AX, [%s]\n", $1);
+          printf("XOR DX, DX\n");
+          printf("MOV BX, [%s]\n", $3);
+          printf("DIV BX\n");
+          $$ = $1;
+      }
+;
+
+%%
+
+void yyerror(const char *s) {
+    printf("Error: %s\n", s);
+}
+
+int main() {
+    printf("Enter TAC:\n");
+    yyparse();
+    return 0;
+}
+
+// gen.y
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+
+void yyerror(const char *s);
+int yylex();
+%}
+
+%token ID NUM
+
+%%
+
+stmt:
+    ID '=' expr ';' {
+        printf("MOV AX, [%s]\n", $3);
+        printf("MOV [%s], AX\n\n", $1);
+    }
+;
+
+expr:
+      ID '+' ID {
+          printf("MOV AX, [%s]\n", $1);
+          printf("ADD AX, [%s]\n", $3);
+          $$ = $1;
+      }
+    | ID '-' ID {
+          printf("MOV AX, [%s]\n", $1);
+          printf("SUB AX, [%s]\n", $3);
+          $$ = $1;
+      }
+    | ID '*' ID {
+          printf("MOV AX, [%s]\n", $1);
+          printf("MOV BX, [%s]\n", $3);
+          printf("MUL BX\n");
+          $$ = $1;
+      }
+    | ID '/' ID {
+          printf("MOV AX, [%s]\n", $1);
+          printf("XOR DX, DX\n");
+          printf("MOV BX, [%s]\n", $3);
+          printf("DIV BX\n");
+          $$ = $1;
+      }
+;
+
+%%
+
+void yyerror(const char *s) {
+    printf("Error: %s\n", s);
+}
+
+int main() {
+    printf("Enter TAC:\n");
+    yyparse();
+    return 0;
+}

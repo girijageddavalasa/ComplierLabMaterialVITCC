@@ -1,0 +1,526 @@
+// odd a even b ccc
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%x S2 S3 S4 S5 S6 S7 S8 S9 DEAD
+
+%%
+
+/* -------- S1 (INITIAL) -------- */
+<INITIAL>a { BEGIN S2; }
+<INITIAL>. { BEGIN DEAD; }
+
+/* -------- S2 -------- */
+<S2>a { BEGIN S3; }
+<S2>b { BEGIN S4; }
+<S2>. { BEGIN DEAD; }
+
+/* -------- S3 -------- */
+<S3>a { BEGIN S2; }
+<S3>. { BEGIN DEAD; }
+
+/* -------- S4 -------- */
+<S4>b { BEGIN S5; }
+<S4>. { BEGIN DEAD; }
+
+/* -------- S5 -------- */
+<S5>b { BEGIN S6; }
+<S5>c { BEGIN S7; }
+<S5>. { BEGIN DEAD; }
+
+/* -------- S6 -------- */
+<S6>b { BEGIN S5; }
+<S6>. { BEGIN DEAD; }
+
+/* -------- S7 -------- */
+<S7>c { BEGIN S8; }
+<S7>. { BEGIN DEAD; }
+
+/* -------- S8 -------- */
+<S8>c { BEGIN S9; }
+<S8>. { BEGIN DEAD; }
+
+/* -------- S9 (FINAL) -------- */
+<S9>\n {
+    printf("\nRESULT: ACCEPTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S9>. { BEGIN DEAD; }
+
+/* -------- DEAD -------- */
+<DEAD>[^\n]+ { }
+<DEAD>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+
+%%
+
+int main() {
+    printf("Enter string: ");
+    yylex();
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+
+_____________________________________________
+
+// substring bca 
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%x S2 S3 S4 DEAD
+
+%%
+
+/* -------- S1 (INITIAL) -------- */
+<INITIAL>b { BEGIN S2; }
+<INITIAL>[ac] { BEGIN INITIAL; }
+<INITIAL>\n { printf("\nRESULT: REJECTED\n\nEnter string: "); }
+<INITIAL>. { BEGIN DEAD; }
+
+/* -------- S2 -------- */
+<S2>c { BEGIN S3; }
+<S2>b { BEGIN S2; }
+<S2>a { BEGIN INITIAL; }
+<S2>\n { printf("\nRESULT: REJECTED\n\nEnter string: "); BEGIN INITIAL; }
+<S2>. { BEGIN DEAD; }
+
+/* -------- S3 -------- */
+<S3>a { BEGIN S4; }
+<S3>b { BEGIN S2; }
+<S3>c { BEGIN INITIAL; }
+<S3>\n { printf("\nRESULT: REJECTED\n\nEnter string: "); BEGIN INITIAL; }
+<S3>. { BEGIN DEAD; }
+
+/* -------- S4 (FINAL) -------- */
+<S4>[abc] { BEGIN S4; }
+<S4>\n {
+    printf("\nRESULT: ACCEPTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S4>. { BEGIN DEAD; }
+
+/* -------- DEAD -------- */
+<DEAD>[^\n]+ { }
+<DEAD>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+
+%%
+
+int main() {
+    printf("Enter string: ");
+    yylex();
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+______________________________________________________________
+
+//even a and even b
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%x S2 S3 S4 DEAD
+
+%%
+
+/* -------- S1 (INITIAL) -------- */
+<INITIAL>a { BEGIN S2; }
+<INITIAL>b { BEGIN S3; }
+<INITIAL>\n {
+    printf("\nRESULT: ACCEPTED\n\nEnter string: ");
+}
+<INITIAL>. { BEGIN DEAD; }
+
+/* -------- S2 -------- */
+<S2>a { BEGIN INITIAL; }
+<S2>b { BEGIN S4; }
+<S2>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S2>. { BEGIN DEAD; }
+
+/* -------- S3 -------- */
+<S3>a { BEGIN S4; }
+<S3>b { BEGIN INITIAL; }
+<S3>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S3>. { BEGIN DEAD; }
+
+/* -------- S4 -------- */
+<S4>a { BEGIN S3; }
+<S4>b { BEGIN S2; }
+<S4>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S4>. { BEGIN DEAD; }
+
+/* -------- DEAD -------- */
+<DEAD>[^\n]+ { }
+<DEAD>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+
+%%
+
+int main() {
+    printf("Enter string: ");
+    yylex();
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+______________________________________
+
+// even a and odd b
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%x S2 S4 DEAD   /* S3 is handled as a state name via BEGIN */
+
+%%
+
+/* -------- S1 (INITIAL) -------- */
+<INITIAL>a { BEGIN S2; }
+<INITIAL>b { BEGIN S3; }
+<INITIAL>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+}
+<INITIAL>. { BEGIN DEAD; }
+
+/* -------- S2 -------- */
+<S2>a { BEGIN INITIAL; }
+<S2>b { BEGIN S4; }
+<S2>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S2>. { BEGIN DEAD; }
+
+/* -------- S3 (FINAL STATE) -------- */
+<S3>a { BEGIN S4; }
+<S3>b { BEGIN INITIAL; }
+<S3>\n {
+    printf("\nRESULT: ACCEPTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S3>. { BEGIN DEAD; }
+
+/* -------- S4 -------- */
+<S4>a { BEGIN S3; }
+<S4>b { BEGIN S2; }
+<S4>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S4>. { BEGIN DEAD; }
+
+/* -------- DEAD -------- */
+<DEAD>[^\n]+ { }
+<DEAD>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+
+%%
+
+int main() {
+    printf("Enter string: ");
+    yylex();
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+__________________________________________
+
+// odd a and even b 
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%x S2 S3 S4 DEAD
+
+%%
+
+/* -------- S1 (INITIAL) -------- */
+<INITIAL>a { BEGIN S2; }
+<INITIAL>b { BEGIN S3; }
+<INITIAL>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+}
+<INITIAL>. { BEGIN DEAD; }
+
+/* -------- S2 (FINAL STATE) -------- */
+<S2>a { BEGIN INITIAL; }
+<S2>b { BEGIN S4; }
+<S2>\n {
+    printf("\nRESULT: ACCEPTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S2>. { BEGIN DEAD; }
+
+/* -------- S3 -------- */
+<S3>a { BEGIN S4; }
+<S3>b { BEGIN INITIAL; }
+<S3>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S3>. { BEGIN DEAD; }
+
+/* -------- S4 -------- */
+<S4>a { BEGIN S3; }
+<S4>b { BEGIN S2; }
+<S4>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S4>. { BEGIN DEAD; }
+
+/* -------- DEAD -------- */
+<DEAD>[^\n]+ { }
+<DEAD>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+
+%%
+
+int main() {
+    printf("Enter string: ");
+    yylex();
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+_________________________________
+
+// even a OR even b S1, S2, S3
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%x S2 S3 S4 DEAD
+
+%%
+
+<INITIAL>a { BEGIN S2; }
+<INITIAL>b { BEGIN S3; }
+<INITIAL>\n { printf("\nRESULT: ACCEPTED\n\nEnter string: "); }
+<INITIAL>. { BEGIN DEAD; }
+
+<S2>a { BEGIN INITIAL; }
+<S2>b { BEGIN S4; }
+<S2>\n { printf("\nRESULT: ACCEPTED\n\nEnter string: "); BEGIN INITIAL; }
+<S2>. { BEGIN DEAD; }
+
+<S3>a { BEGIN S4; }
+<S3>b { BEGIN INITIAL; }
+<S3>\n { printf("\nRESULT: ACCEPTED\n\nEnter string: "); BEGIN INITIAL; }
+<S3>. { BEGIN DEAD; }
+
+<S4>a { BEGIN S3; }
+<S4>b { BEGIN S2; }
+<S4>\n { printf("\nRESULT: REJECTED\n\nEnter string: "); BEGIN INITIAL; }
+<S4>. { BEGIN DEAD; }
+
+<DEAD>[^\n]+ { }
+<DEAD>\n { printf("\nRESULT: REJECTED\n\nEnter string: "); BEGIN INITIAL; }
+
+%%
+
+int main() { printf("Enter string: "); yylex(); return 0; }
+int yywrap() { return 1; }
+
+______________________________________________________
+// even a OR odd b	S1, S3, S4
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%x S2 S3 S4 DEAD
+
+%%
+
+<INITIAL>a { BEGIN S2; }
+<INITIAL>b { BEGIN S3; }
+<INITIAL>\n { printf("\nRESULT: ACCEPTED\n\nEnter string: "); }
+<INITIAL>. { BEGIN DEAD; }
+
+<S2>a { BEGIN INITIAL; }
+<S2>b { BEGIN S4; }
+<S2>\n { printf("\nRESULT: REJECTED\n\nEnter string: "); BEGIN INITIAL; }
+<S2>. { BEGIN DEAD; }
+
+<S3>a { BEGIN S4; }
+<S3>b { BEGIN INITIAL; }
+<S3>\n { printf("\nRESULT: ACCEPTED\n\nEnter string: "); BEGIN INITIAL; }
+<S3>. { BEGIN DEAD; }
+
+<S4>a { BEGIN S3; }
+<S4>b { BEGIN S2; }
+<S4>\n { printf("\nRESULT: ACCEPTED\n\nEnter string: "); BEGIN INITIAL; }
+<S4>. { BEGIN DEAD; }
+
+<DEAD>[^\n]+ { }
+<DEAD>\n { printf("\nRESULT: REJECTED\n\nEnter string: "); BEGIN INITIAL; }
+
+%%
+
+int main() { printf("Enter string: "); yylex(); return 0; }
+int yywrap() { return 1; }
+
+______________________________________________________
+
+// odd a OR even b	S1, S2, S4
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%x S2 S3 S4 DEAD
+
+%%
+
+<INITIAL>a { BEGIN S2; }
+<INITIAL>b { BEGIN S3; }
+<INITIAL>\n { printf("\nRESULT: ACCEPTED\n\nEnter string: "); }
+<INITIAL>. { BEGIN DEAD; }
+
+<S2>a { BEGIN INITIAL; }
+<S2>b { BEGIN S4; }
+<S2>\n { printf("\nRESULT: ACCEPTED\n\nEnter string: "); BEGIN INITIAL; }
+<S2>. { BEGIN DEAD; }
+
+<S3>a { BEGIN S4; }
+<S3>b { BEGIN INITIAL; }
+<S3>\n { printf("\nRESULT: REJECTED\n\nEnter string: "); BEGIN INITIAL; }
+<S3>. { BEGIN DEAD; }
+
+<S4>a { BEGIN S3; }
+<S4>b { BEGIN S2; }
+<S4>\n { printf("\nRESULT: ACCEPTED\n\nEnter string: "); BEGIN INITIAL; }
+<S4>. { BEGIN DEAD; }
+
+<DEAD>[^\n]+ { }
+<DEAD>\n { printf("\nRESULT: REJECTED\n\nEnter string: "); BEGIN INITIAL; }
+
+%%
+
+int main() { printf("Enter string: "); yylex(); return 0; }
+int yywrap() { return 1; }
+
+_______________________________________________________
+
+// odd a OR odd b   S2, S3, S4
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+
+%x S2 S3 S4 DEAD
+
+%%
+
+/* -------- S1 (INITIAL) -------- */
+<INITIAL>a { BEGIN S2; }
+<INITIAL>b { BEGIN S3; }
+<INITIAL>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+}
+<INITIAL>. { BEGIN DEAD; }
+
+/* -------- S2 (FINAL) -------- */
+<S2>a { BEGIN INITIAL; }
+<S2>b { BEGIN S4; }
+<S2>\n {
+    printf("\nRESULT: ACCEPTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S2>. { BEGIN DEAD; }
+
+/* -------- S3 (FINAL) -------- */
+<S3>a { BEGIN S4; }
+<S3>b { BEGIN INITIAL; }
+<S3>\n {
+    printf("\nRESULT: ACCEPTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S3>. { BEGIN DEAD; }
+
+/* -------- S4 (FINAL) -------- */
+<S4>a { BEGIN S3; }
+<S4>b { BEGIN S2; }
+<S4>\n {
+    printf("\nRESULT: ACCEPTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+<S4>. { BEGIN DEAD; }
+
+/* -------- DEAD -------- */
+<DEAD>[^\n]+ { }
+<DEAD>\n {
+    printf("\nRESULT: REJECTED\n\nEnter string: ");
+    BEGIN INITIAL;
+}
+
+%%
+
+int main() {
+    printf("Enter string: ");
+    yylex();
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+_____________________________________________________
+ 
+
+
+
+//

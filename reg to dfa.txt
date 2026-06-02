@@ -1,0 +1,104 @@
+#include<stdio.h>
+#include<string.h>
+int main() {
+	int ns,na,nt,nf;
+	int i,j;
+	printf("Enter number of states:");
+	scanf("%d",&ns);
+	printf("Enter number of input symbols:");
+	scanf("%d",&na);
+	char alpha[na];
+	printf("Enter input symbols:\n");
+	for(i=0; i<na; i++) {
+		scanf(" %c",&alpha[i]);
+	}
+	int trans[ns][na];
+	for(i=0; i<ns; i++) {
+		for(j=0; j<na; j++) {
+			trans[i][j]=-1;
+		}
+	}
+	char table[ns][ns];
+	for(i=0; i<ns; i++) {
+		for(j=0; j<ns; j++) {
+			table[i][j]='-';
+		}
+	}
+	printf("Enter number of transitions:");
+	scanf("%d",&nt);
+	int curr,next;
+	char sym;
+	printf("Enter transitions(curr input next):\n");
+	for(i=0; i<nt; i++) {
+		scanf("%d %c %d",&curr,&sym,&next);
+		for(j=0; j<na; j++) {
+			if(alpha[j]==sym) {
+				trans[curr][j]=next;
+				table[curr][next]=sym;
+				break;
+			}
+		}
+	}
+	printf("\nTransition Table:\n");
+	printf(" ");
+	for(i=0; i<ns; i++) {
+		printf("q%d ",i);
+	}
+	printf("\n");
+	for(i=0; i<ns; i++) {
+		printf("q%d ",i);
+		for(j=0; j<ns; j++) {
+			printf(" %c ",table[i][j]);
+		}
+		printf("\n");
+	}
+	printf("Enter number of final states:");
+	scanf("%d",&nf);
+	int final[nf];
+	printf("Enter final states:\n");
+	for(i=0; i<nf; i++) {
+		scanf("%d",&final[i]);
+	}
+	int a=1;
+	while(a==1) {
+		printf("do you want to enter a string 1/0\n");
+		scanf("%d",&a);
+		if(a==0) break;
+		char s[100];
+		printf("Enter input string:");
+		scanf("%s",s);
+		int state=0,found,invalid=0;
+		printf("(q0");
+		for(i=0; i<strlen(s); i++) {
+			found=-1;
+			for(j=0; j<na; j++) {
+				if(alpha[j]==s[i]) {
+					found=j;
+					break;
+				}
+			}
+			if(found==-1||trans[state][found]==-1) {
+				printf(",%c)->invalid\n",s[i]);
+				printf("String rejected\n");
+				invalid=1;
+				break;
+			}
+			state=trans[state][found];
+			printf(",%c)->(q%d",s[i],state);
+		}
+		if(invalid) continue;
+		printf(")\n");
+		int acc=0;
+		for(i=0; i<nf; i++) {
+			if(state==final[i]) {
+				acc=1;
+				break;
+			}
+		}
+		if(acc)
+			printf("String accepted\n");
+		else
+			printf("String rejected\n");
+	}
+	return 0;
+}

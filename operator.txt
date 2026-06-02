@@ -1,0 +1,770 @@
+/*
+ * ============================================================
+ *  Operator Precedence Parser
+ *  - Computes LEADING and TRAILING sets
+ *  - Builds the operator precedence table
+ *  - Parses an input string using the table
+ * ============================================================
+ *
+ *  Input format (stdin):
+ *    Line 1 : number of non-terminals
+ *    Line 2 : non-terminal symbols (comma-separated or space-separated)
+ *    Line 3 : number of terminals
+ *    Line 4 : terminal symbols (comma-separated; empty field = literal comma)
+ *    Line 5 : number of productions
+ *    Lines 6..5+n : productions in the form   LHS -> RHS
+ *    Last line : input string to parse
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* ============================================================
+ *  Constants
+ * ============================================================ */
+#define MAX_NT    24    /* max number of non-terminals          */
+#define MAX_T     30    /* max number of terminals              */
+#define MAX_PROD  64    /* max number of productions            */
+#define MAX_SYM   16    /* max characters in one symbol         */
+#define MAX_RHS   40    /* max symbols in one production RHS    */
+#define MAX_SET   64    /* max size of LEADING / TRAILING set   */
+#define MAX_TOK  512    /* max tokens in input string           */
+#define MAX_STK  512    /* max stack depth                      */
+#define MAX_STEPS 999   /* guard against infinite loops         */
+
+/* Precedence relation codes */
+#define NONE  0
+#define LT    1    /* <·  shift  (less-than)    */
+#define GT    2    /* ·>  reduce (greater-than) */
+#define EQ    3    /* =·  shift  (equal)        */
+
+/* ============================================================
+ *  Data Types
+ * ============================================================ */
+typedef struct {
+    char lhs[MAX_SYM];
+    char rhs[MAX_RHS][MAX_SYM];
+    int  rlen;
+} Prod;
+
+/* ============================================================
+ *  Globals
+ * ============================================================ */
+static char NT[MAX_NT][MAX_SYM];   static int numNT;
+static char T [MAX_T ][MAX_SYM];   static int numT;
+static Prod prods[MAX_PROD];        static int numProd;
+
+static int leading [MAX_NT][MAX_SET];   static int leadSz [MAX_NT];
+static int trailing[MAX_NT][MAX_SET];   static int trailSz[MAX_NT];
+
+static int prec[MAX_T][MAX_T];   /* prec[i][j] = relation T[i] vs T[j] */
+
+/* ============================================================
+ *  Utility helpers
+ * ============================================================ */
+static int ntIdx(const char *s)
+{
+    int i;
+    for (i = 0; i < numNT; i++)
+        if (!strcmp(NT[i], s)) return i;
+    return -1;
+}
+
+static int tIdx(const char *s)
+{
+    int i;
+    for (i = 0; i < numT; i++)
+        if (!strcmp(T[i], s)) return i;
+    return -1;
+}
+
+static int isNT(const char *s) { return ntIdx(s) >= 0; }
+static int isT (const char *s) { return tIdx (s) >= 0; }
+
+static void setAdd(int set[], int *sz, int v)
+{
+    int i;
+    for (i = 0; i < *sz; i++)
+        if (set[i] == v) return;
+    set[(*sz)++] = v;
+}
+
+static const char *relStr(int r)
+{
+    switch (r) {
+        case LT: return "<.";
+        case GT: return ".>";
+        case EQ: return "=.";
+        default: return " ";
+    }
+}
+
+/* ============================================================
+ *  LEADING set computation
+ * ============================================================ */
+static void computeLeading(void)
+{
+    int changed, p, ai, n, bi, j, old;
+    char (*rhs)[MAX_SYM];
+
+    memset(leadSz, 0, sizeof(leadSz));
+    changed = 1;
+
+    while (changed) {
+        changed = 0;
+        for (p = 0; p < numProd; p++) {
+            ai  = ntIdx(prods[p].lhs);
+            n   = prods[p].rlen;
+            rhs = prods[p].rhs;
+            if (n == 0) continue;
+
+            /* (a) First symbol is a terminal */
+            if (isT(rhs[0])) {
+                old = leadSz[ai];
+                setAdd(leading[ai], &leadSz[ai], tIdx(rhs[0]));
+                if (leadSz[ai] != old) changed = 1;
+            }
+
+            /* (b) First is NT, second is a terminal */
+            if (isNT(rhs[0]) && n >= 2 && isT(rhs[1])) {
+                old = leadSz[ai];
+                setAdd(leading[ai], &leadSz[ai], tIdx(rhs[1]));
+                if (leadSz[ai] != old) changed = 1;
+            }
+
+            /* (c) First is NT B: propagate LEADING(B) */
+            if (isNT(rhs[0])) {
+                bi = ntIdx(rhs[0]);
+                for (j = 0; j < leadSz[bi]; j++) {
+                    old = leadSz[ai];
+                    setAdd(leading[ai], &leadSz[ai], leading[bi][j]);
+                    if (leadSz[ai] != old) changed = 1;
+                }
+            }
+        }
+    }
+}
+
+/* ============================================================
+ *  TRAILING set computation
+ * ============================================================ */
+static void computeTrailing(void)
+{
+    int changed, p, ai, n, bi, j, old;
+    char (*rhs)[MAX_SYM];
+
+    memset(trailSz, 0, sizeof(trailSz));
+    changed = 1;
+
+    while (changed) {
+        changed = 0;
+        for (p = 0; p < numProd; p++) {
+            ai  = ntIdx(prods[p].lhs);
+            n   = prods[p].rlen;
+            rhs = prods[p].rhs;
+            if (n == 0) continue;
+
+            /* (a) Last symbol is a terminal */
+            if (isT(rhs[n-1])) {
+                old = trailSz[ai];
+                setAdd(trailing[ai], &trailSz[ai], tIdx(rhs[n-1]));
+                if (trailSz[ai] != old) changed = 1;
+            }
+
+            /* (b) Last is NT, second-to-last is a terminal */
+            if (isNT(rhs[n-1]) && n >= 2 && isT(rhs[n-2])) {
+                old = trailSz[ai];
+                setAdd(trailing[ai], &trailSz[ai], tIdx(rhs[n-2]));
+                if (trailSz[ai] != old) changed = 1;
+            }
+
+            /* (c) Last is NT B: propagate TRAILING(B) */
+            if (isNT(rhs[n-1])) {
+                bi = ntIdx(rhs[n-1]);
+                for (j = 0; j < trailSz[bi]; j++) {
+                    old = trailSz[ai];
+                    setAdd(trailing[ai], &trailSz[ai], trailing[bi][j]);
+                    if (trailSz[ai] != old) changed = 1;
+                }
+            }
+        }
+    }
+}
+
+/* ============================================================
+ *  Build operator precedence table
+ * ============================================================ */
+static void buildTable(void)
+{
+    int p, n, k, a, bi, b, dol, si, j;
+    char (*rhs)[MAX_SYM];
+
+    memset(prec, NONE, sizeof(prec));
+
+    for (p = 0; p < numProd; p++) {
+        n   = prods[p].rlen;
+        rhs = prods[p].rhs;
+
+        for (k = 0; k < n; k++) {
+
+            /* R1a: terminal immediately followed by terminal */
+            if (isT(rhs[k]) && k+1 < n && isT(rhs[k+1]))
+                prec[tIdx(rhs[k])][tIdx(rhs[k+1])] = EQ;
+
+            /* R1b: terminal, NT, terminal */
+            if (isT(rhs[k]) && k+1 < n && isNT(rhs[k+1]) && k+2 < n && isT(rhs[k+2]))
+                prec[tIdx(rhs[k])][tIdx(rhs[k+2])] = EQ;
+
+            /* R2: terminal followed by NT  ->  terminal <· LEADING(NT) */
+            if (isT(rhs[k]) && k+1 < n && isNT(rhs[k+1])) {
+                a  = tIdx(rhs[k]);
+                bi = ntIdx(rhs[k+1]);
+                for (j = 0; j < leadSz[bi]; j++)
+                    if (prec[a][leading[bi][j]] == NONE)
+                        prec[a][leading[bi][j]] = LT;
+            }
+
+            /* R3: NT followed by terminal  ->  TRAILING(NT) ·> terminal */
+            if (isNT(rhs[k]) && k+1 < n && isT(rhs[k+1])) {
+                bi = ntIdx(rhs[k]);
+                b  = tIdx(rhs[k+1]);
+                for (j = 0; j < trailSz[bi]; j++)
+                    if (prec[trailing[bi][j]][b] == NONE)
+                        prec[trailing[bi][j]][b] = GT;
+            }
+        }
+    }
+
+    /* Relations with end-marker $ */
+    dol = tIdx("$");
+    if (dol < 0) return;
+
+    si = 0;   /* start symbol index */
+    for (j = 0; j < leadSz[si]; j++)
+        if (prec[dol][leading[si][j]] == NONE)
+            prec[dol][leading[si][j]] = LT;
+
+    for (j = 0; j < trailSz[si]; j++)
+        if (prec[trailing[si][j]][dol] == NONE)
+            prec[trailing[si][j]][dol] = GT;
+}
+
+/* ============================================================
+ *  Print LEADING / TRAILING sets
+ * ============================================================ */
+static void printSets(void)
+{
+    int i, j;
+
+    printf("| COMPUTATION OF LEADING SETS |\n");
+    for (i = 0; i < numNT; i++) {
+        printf("  LEADING( %-5s) = { ", NT[i]);
+        for (j = 0; j < leadSz[i]; j++) {
+            printf("%-4s", T[leading[i][j]]);
+            if (j < leadSz[i] - 1) printf(", ");
+        }
+        printf("}\n");
+    }
+
+    printf("| COMPUTATION OF TRAILING SETS |\n");
+    for (i = 0; i < numNT; i++) {
+        printf("  TRAILING( %-5s) = { ", NT[i]);
+        for (j = 0; j < trailSz[i]; j++) {
+            printf("%-4s", T[trailing[i][j]]);
+            if (j < trailSz[i] - 1) printf(", ");
+        }
+        printf("}\n");
+    }
+}
+
+/* ============================================================
+ *  Print operator precedence table
+ * ============================================================ */
+static void printTable(void)
+{
+    int i, j;
+
+    printf("| OPERATOR PRECEDENCE TABLE |\n");
+    printf("  |");
+    for (j = 0; j < numT; j++) printf(" %-5s|", T[j]);
+    printf("\n--------|");
+    for (j = 0; j < numT; j++) printf("-------|");
+    printf("\n");
+
+    for (i = 0; i < numT; i++) {
+        printf("  %-6s|", T[i]);
+        for (j = 0; j < numT; j++) {
+            if (prec[i][j])
+                printf("  %-4s|", relStr(prec[i][j]));
+            else
+                printf("      |");
+        }
+        printf("\n");
+    }
+
+    printf("\n  LEGEND:  <. = shift (less-than)"
+           "   .> = reduce (greater-than)"
+           "   =. = shift (equal)"
+           "   blank = error\n\n");
+}
+
+/* ============================================================
+ *  Parsing – helpers
+ * ============================================================ */
+
+/* Tokenise the input string into the tok[] array.
+   Returns total number of tokens (including trailing "$"). */
+static int tokenise(const char *inp, char tok[][MAX_SYM], int *n)
+{
+    int len = (int)strlen(inp);
+    int i = 0;
+    *n = 0;
+
+    while (i < len) {
+        int best = -1, bestLen = 0;
+        int t;
+        for (t = 0; t < numT; t++) {
+            int tl = (int)strlen(T[t]);
+            if (strncmp(inp + i, T[t], tl) == 0 && tl > bestLen) {
+                best    = t;
+                bestLen = tl;
+            }
+        }
+        if (best >= 0) {
+            strcpy(tok[(*n)++], T[best]);
+            i += bestLen;
+        } else {
+            i++;   /* skip unrecognised character */
+        }
+    }
+    strcpy(tok[(*n)++], "$");
+    return *n;
+}
+
+/* Return index of rightmost real terminal on the stack (ignores "$"). */
+static int rightmostTerm(char stk[][MAX_SYM], int top)
+{
+    int i;
+    for (i = top; i >= 0; i--)
+        if (isT(stk[i]) && strcmp(stk[i], "$") != 0)
+            return i;
+    return -1;
+}
+
+/* Find the low boundary of the handle starting just past
+   the previous terminal to the left of position rt. */
+static int findHandleLo(char stk[][MAX_SYM], int top, int rt)
+{
+    int k, prev = -1, lo;
+
+    for (k = rt - 1; k >= 0; k--) {
+        if (!strcmp(stk[k], "$") || isT(stk[k])) {
+            prev = k;
+            break;
+        }
+    }
+
+    lo = (prev < 0) ? 0 : prev + 1;
+
+    /* Extend lo leftward over any leading NTs */
+    while (lo > 0 && isNT(stk[lo - 1]) && strcmp(stk[lo - 1], "$") != 0)
+        lo--;
+
+    return lo;
+}
+
+/* Exact match: same length AND same terminal skeleton. */
+static int exactMatch(int p, char stk[][MAX_SYM], int lo, int top)
+{
+    char st[MAX_RHS][MAX_SYM], pt[MAX_RHS][MAX_SYM];
+    int sn = 0, pn = 0, i;
+
+    if (top - lo + 1 != prods[p].rlen) return 0;
+
+    for (i = lo; i <= top; i++)
+        if (isT(stk[i])) strcpy(st[sn++], stk[i]);
+
+    for (i = 0; i < prods[p].rlen; i++)
+        if (isT(prods[p].rhs[i])) strcpy(pt[pn++], prods[p].rhs[i]);
+
+    if (sn != pn) return 0;
+    for (i = 0; i < sn; i++)
+        if (strcmp(st[i], pt[i]) != 0) return 0;
+    return 1;
+}
+
+/* Skeleton-only match: same terminal sequence, ignoring length. */
+static int skelMatch(int p, char stk[][MAX_SYM], int lo, int top)
+{
+    char st[MAX_RHS][MAX_SYM], pt[MAX_RHS][MAX_SYM];
+    int sn = 0, pn = 0, i;
+
+    for (i = lo; i <= top; i++)
+        if (isT(stk[i])) strcpy(st[sn++], stk[i]);
+
+    for (i = 0; i < prods[p].rlen; i++)
+        if (isT(prods[p].rhs[i])) strcpy(pt[pn++], prods[p].rhs[i]);
+
+    if (sn != pn) return 0;
+    for (i = 0; i < sn; i++)
+        if (strcmp(st[i], pt[i]) != 0) return 0;
+    return 1;
+}
+
+/* Find the production that matches the handle stk[lo..top].
+   Tries exact first, then skeleton-only. Returns index or -1. */
+static int findProd(char stk[][MAX_SYM], int lo, int top)
+{
+    int p;
+    for (p = 0; p < numProd; p++)
+        if (exactMatch(p, stk, lo, top)) return p;
+    for (p = 0; p < numProd; p++)
+        if (skelMatch (p, stk, lo, top)) return p;
+    return -1;
+}
+
+/* Build a printable string from the stack. */
+static void mkStkStr(char stk[][MAX_SYM], int top, char *out)
+{
+    int i;
+    out[0] = '\0';
+    for (i = 0; i <= top; i++) {
+        strcat(out, stk[i]);
+        if (i < top) strcat(out, " ");
+    }
+}
+
+/* Build a printable string from the remaining input. */
+static void mkInpStr(char tok[][MAX_SYM], int ip, int n, char *out)
+{
+    int j;
+    out[0] = '\0';
+    for (j = ip; j < n; j++) {
+        strcat(out, tok[j]);
+        if (j < n - 1) strcat(out, " ");
+    }
+}
+
+/* ============================================================
+ *  Main parsing routine
+ * ============================================================ */
+static void parseInput(const char *inputStr)
+{
+    char tok[MAX_TOK][MAX_SYM];
+    char stk[MAX_STK][MAX_SYM];
+    char ss[700], is[400], act[256];
+    int  numTok = 0, top = -1, ip = 0;
+    int  steps  = 0, accepted = 0, err = 0;
+    int  rt, a, b, rel, lo, pi, wlo, k;
+
+    tokenise(inputStr, tok, &numTok);
+
+    strcpy(stk[++top], "$");
+
+    printf("| OPERATOR PRECEDENCE PARSING |\n");
+    printf("  Input string : %s\n\n", inputStr);
+
+    printf("  %-40s | %-25s | %-5s | %s\n",
+           "Stack", "Remaining Input", "Rel", "Action");
+    printf("  %-40s-+-%-25s-+-%-5s-+-%-40s\n",
+           "----------------------------------------",
+           "-------------------------",
+           "-----",
+           "----------------------------------------");
+
+    while (!accepted && !err) {
+        mkStkStr(stk, top, ss);
+        mkInpStr(tok, ip, numTok, is);
+
+        /* ---- Accept checks when input is exhausted ---- */
+        if (!strcmp(tok[ip], "$")) {
+            if (top == 1 && !strcmp(stk[0], "$") && isNT(stk[1])) {
+                printf("  %-40s | %-25s | %-5s | ACCEPT\n", ss, is, "");
+                accepted = 1;
+                break;
+            }
+            if (top == 2 && !strcmp(stk[0], "$") && isNT(stk[1]) &&
+                !strcmp(stk[2], "$")) {
+                printf("  %-40s | %-25s | %-5s | ACCEPT\n", ss, is, "=.");
+                accepted = 1;
+                break;
+            }
+        }
+
+        rt = rightmostTerm(stk, top);
+
+        /* No real terminal on the stack yet – just shift */
+        if (rt < 0) {
+            if (!strcmp(tok[ip], "$")) {
+                printf("  %-40s | %-25s | %-5s | ACCEPT\n", ss, is, "");
+                accepted = 1;
+                break;
+            }
+            sprintf(act, "SHIFT %s", tok[ip]);
+            printf("  %-40s | %-25s | %-5s | %s\n", ss, is, "", act);
+            strcpy(stk[++top], tok[ip++]);
+            continue;
+        }
+
+        a = tIdx(stk[rt]);
+        b = tIdx(tok[ip]);
+
+        if (a < 0 || b < 0) {
+            printf("  %-40s | %-25s | %-5s | ERROR: unknown symbol\n",
+                   ss, is, "");
+            err = 1;
+            break;
+        }
+
+        /* $ vs $ on input -> accept */
+        if (!strcmp(stk[rt], "$") && !strcmp(tok[ip], "$")) {
+            printf("  %-40s | %-25s | %-5s | ACCEPT\n", ss, is, "=.");
+            accepted = 1;
+            break;
+        }
+
+        rel = prec[a][b];
+
+        if (rel == LT || rel == EQ) {
+            /* SHIFT */
+            sprintf(act, "SHIFT %s", tok[ip]);
+            printf("  %-40s | %-25s | %-5s | %s\n",
+                   ss, is, relStr(rel), act);
+            strcpy(stk[++top], tok[ip++]);
+
+        } else if (rel == GT) {
+            /* REDUCE */
+            lo = findHandleLo(stk, top, rt);
+            pi = -1;
+
+            /* Widen the handle window until a production matches */
+            for (wlo = lo; wlo >= 0 && pi < 0; wlo--) {
+                pi = findProd(stk, wlo, top);
+                if (pi >= 0) { lo = wlo; break; }
+                if (wlo == 0) break;
+            }
+
+            if (pi >= 0) {
+                sprintf(act, "REDUCE by %s -> ", prods[pi].lhs);
+                for (k = 0; k < prods[pi].rlen; k++)
+                    strcat(act, prods[pi].rhs[k]);
+                printf("  %-40s | %-25s | %-5s | %s\n",
+                       ss, is, relStr(rel), act);
+                /* Pop handle, push LHS */
+                top = lo - 1;
+                strcpy(stk[++top], prods[pi].lhs);
+            } else {
+                printf("  %-40s | %-25s | %-5s | ERROR: no matching production\n",
+                       ss, is, relStr(rel));
+                err = 1;
+            }
+
+        } else {
+            printf("  %-40s | %-25s | %-5s | ERROR: prec['%s']['%s'] undefined\n",
+                   ss, is, "", T[a], T[b]);
+            err = 1;
+        }
+
+        if (++steps > MAX_STEPS) {
+            printf("  ERROR: exceeded %d steps.\n", MAX_STEPS);
+            err = 1;
+        }
+    }
+
+    printf("\n");
+    if (accepted)
+        printf("  ===> Input string \"%s\" ACCEPTED. <===\n", inputStr);
+    else
+        printf("  ===> Input string \"%s\" REJECTED. <===\n", inputStr);
+}
+
+/* ============================================================
+ *  Input parsing helpers
+ * ============================================================ */
+static void trimLine(char *s)
+{
+    int n = (int)strlen(s);
+    while (n > 0 && (s[n-1] == '\n' || s[n-1] == '\r' || s[n-1] == ' '))
+        s[--n] = '\0';
+}
+
+/* Split comma-separated string; empty field becomes literal ",". */
+static int splitByComma(const char *src, char arr[][MAX_SYM])
+{
+    int cnt = 0;
+    const char *p = src;
+
+    while (1) {
+        const char *q = p;
+        while (*q && *q != ',') q++;
+
+        /* Trim surrounding spaces */
+        const char *s = p;
+        while (s < q && *s == ' ') s++;
+        const char *e = q - 1;
+        while (e >= s && *e == ' ') e--;
+
+        int tlen = (int)(e - s + 1);
+        char tok[MAX_SYM];
+
+        if (tlen <= 0)
+            strcpy(tok, ",");   /* empty field = literal comma terminal */
+        else {
+            strncpy(tok, s, tlen);
+            tok[tlen] = '\0';
+        }
+
+        /* Deduplicate */
+        int dup = 0, i;
+        for (i = 0; i < cnt; i++)
+            if (!strcmp(arr[i], tok)) { dup = 1; break; }
+        if (!dup) strcpy(arr[cnt++], tok);
+
+        if (!*q) break;
+        p = q + 1;
+    }
+    return cnt;
+}
+
+/* Parse a production line "LHS -> RHS" into a Prod struct. */
+static void parseProdLine(const char *line, Prod *prod)
+{
+    char buf[256];
+    strncpy(buf, line, 255);
+    buf[255] = '\0';
+    trimLine(buf);
+
+    char *arrow = strstr(buf, "->");
+    if (!arrow) { prod->rlen = -1; return; }
+
+    *arrow = '\0';
+
+    /* Trim LHS */
+    char *lhs = buf;
+    while (*lhs == ' ') lhs++;
+    char *le = lhs + strlen(lhs) - 1;
+    while (le > lhs && *le == ' ') *le-- = '\0';
+    strcpy(prod->lhs, lhs);
+
+    /* Tokenise RHS by matching known symbols (longest match first) */
+    char *rhs = arrow + 2;
+    prod->rlen  = 0;
+    int pos = 0, rlen = (int)strlen(rhs);
+
+    while (pos < rlen) {
+        int best = -1, bestLen = 0, bestType = 0, i, tl;
+
+        for (i = 0; i < numNT; i++) {
+            tl = (int)strlen(NT[i]);
+            if (strncmp(rhs + pos, NT[i], tl) == 0 && tl > bestLen) {
+                best = i; bestLen = tl; bestType = 1;
+            }
+        }
+        for (i = 0; i < numT; i++) {
+            tl = (int)strlen(T[i]);
+            if (strncmp(rhs + pos, T[i], tl) == 0 && tl > bestLen) {
+                best = i; bestLen = tl; bestType = 2;
+            }
+        }
+
+        if (bestLen > 0) {
+            if (bestType == 1) strcpy(prod->rhs[prod->rlen++], NT[best]);
+            else               strcpy(prod->rhs[prod->rlen++], T [best]);
+            pos += bestLen;
+        } else {
+            pos++;   /* skip unrecognised character */
+        }
+    }
+}
+
+/* ============================================================
+ *  main
+ * ============================================================ */
+int main(void)
+{
+    char line[512], inputStr[256], tmp[512];
+    char *t;
+    int  i, k;
+
+    printf("| OPERATOR PRECEDENCE PARSER |\n\n");
+
+    /* 1. Number of non-terminals */
+    if (!fgets(line, sizeof(line), stdin)) return 1;
+    trimLine(line);
+    numNT = atoi(line);
+
+    /* 2. NT symbols (comma-separated, space-separated, or run-together) */
+    if (!fgets(line, sizeof(line), stdin)) return 1;
+    trimLine(line);
+
+    if ((int)strlen(line) == numNT && !strchr(line, ',')) {
+        /* Single-character NTs written without separators */
+        for (i = 0; i < numNT; i++) {
+            NT[i][0] = line[i];
+            NT[i][1] = '\0';
+        }
+    } else if (strchr(line, ',')) {
+        numNT = splitByComma(line, NT);
+    } else {
+        numNT = 0;
+        strcpy(tmp, line);
+        t = strtok(tmp, " ");
+        while (t && numNT < MAX_NT) {
+            strcpy(NT[numNT++], t);
+            t = strtok(NULL, " ");
+        }
+    }
+
+    /* 3. Number of terminals */
+    if (!fgets(line, sizeof(line), stdin)) return 1;
+    trimLine(line);
+    numT = atoi(line);
+
+    /* 4. Terminal symbols (comma-separated) */
+    if (!fgets(line, sizeof(line), stdin)) return 1;
+    trimLine(line);
+    numT = splitByComma(line, T);
+
+    /* 5. Number of productions */
+    if (!fgets(line, sizeof(line), stdin)) return 1;
+    trimLine(line);
+    numProd = atoi(line);
+
+    /* 6. Productions */
+    for (i = 0; i < numProd; i++) {
+        if (!fgets(line, sizeof(line), stdin)) break;
+        trimLine(line);
+        parseProdLine(line, &prods[i]);
+    }
+
+    /* 7. Input string */
+    if (!fgets(line, sizeof(line), stdin)) return 1;
+    trimLine(line);
+    strcpy(inputStr, line);
+
+    /* ---- Summary ---- */
+    printf("| GRAMMAR SUMMARY |\n");
+    printf("  Non-terminals : ");
+    for (i = 0; i < numNT; i++) printf("[%s] ", NT[i]);
+    printf("\n  Terminals     : ");
+    for (i = 0; i < numT; i++) printf("[%s] ", T[i]);
+    printf("\n  Productions   :\n");
+    for (i = 0; i < numProd; i++) {
+        printf("    P%-2d  %s ->", i + 1, prods[i].lhs);
+        for (k = 0; k < prods[i].rlen; k++) printf(" %s", prods[i].rhs[k]);
+        printf("\n");
+    }
+    printf("  Input string  : %s\n\n", inputStr);
+
+    /* ---- Core algorithm ---- */
+    computeLeading();
+    computeTrailing();
+    printSets();
+    buildTable();
+    printTable();
+    parseInput(inputStr);
+
+    printf("\n");
+    return 0;
+}

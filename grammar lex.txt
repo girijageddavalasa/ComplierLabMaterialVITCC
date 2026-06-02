@@ -1,0 +1,313 @@
+// a^nb^m
+
+
+// .l
+
+%{
+#include <stdio.h>
+#include "lang1.tab.h"
+
+int a_count = 0;
+int b_count = 0;
+%}
+
+%%
+
+"a"    { a_count++; return TOK_A; }
+"b"    { b_count++; return TOK_B; }
+"\n"   { return NEWLINE; }
+[ \t]  ;
+.      { return INVALID; }
+
+%%
+
+int yywrap() { return 1; }
+
+
+// .y code 
+%{
+#include <stdio.h>
+#include <stdlib.h>
+
+extern int a_count;
+extern int b_count;
+
+void yyerror(const char *msg);
+int yylex();
+%}
+
+%token TOK_A TOK_B NEWLINE INVALID
+
+%%
+
+program:
+    | program line
+    ;
+
+line:
+    NEWLINE
+    | string NEWLINE {
+        if (a_count != b_count) {
+            printf("String ACCEPTED  (a^%d b^%d, %d != %d)\n",
+                   a_count, b_count, a_count, b_count);
+        } else {
+            printf("String REJECTED  (a^%d b^%d, counts are equal)\n",
+                   a_count, b_count);
+        }
+        a_count = 0;
+        b_count = 0;
+    }
+    | INVALID NEWLINE {
+        printf("String REJECTED  (invalid character)\n");
+        a_count = 0;
+        b_count = 0;
+    }
+    ;
+
+string:
+    a_part b_part
+    ;
+
+a_part:
+    TOK_A
+    | a_part TOK_A
+    ;
+
+b_part:
+    TOK_B
+    | b_part TOK_B
+    ;
+
+%%
+
+void yyerror(const char *msg) {
+    printf("String REJECTED  (parse error)\n");
+    a_count = 0;
+    b_count = 0;
+}
+
+int main() {
+    printf("L(G) = { a^n b^m | m != n }\n");
+    printf("Enter string:\n");
+    yyparse();
+    return 0;
+}
+
+
+
+
+________________________________________________
+ab(bbaa)^n bba(ba)^n
+
+
+// .l code 
+
+%{
+#include <stdio.h>
+#include "lang2.tab.h"
+%}
+
+%%
+
+"a"    { return TOK_A; }
+"b"    { return TOK_B; }
+"\n"   { return NEWLINE; }
+[ \t]  ;
+.      { return INVALID; }
+
+%%
+
+int yywrap() { return 1; }
+
+
+___
+
+// . y code 
+%{
+#include <stdio.h>
+#include <stdlib.h>
+
+void yyerror(const char *msg);
+int  yylex();
+
+int accepted = 0;
+%}
+
+%token TOK_A TOK_B NEWLINE INVALID
+
+%%
+
+program:
+    | program line
+    ;
+
+line:
+    NEWLINE
+    | string NEWLINE {
+        if (accepted)
+            printf("String ACCEPTED  => belongs to L(G)\n");
+        else
+            printf("String REJECTED  => NOT in L(G)\n");
+        accepted = 0;
+    }
+    | INVALID NEWLINE {
+        printf("String REJECTED  (invalid character)\n");
+    }
+    ;
+
+string:
+    TOK_A TOK_B mid { accepted = 1; }
+    ;
+
+mid:
+    TOK_B TOK_B TOK_A TOK_A mid TOK_B TOK_A
+    | TOK_B TOK_B TOK_A
+    ;
+
+%%
+
+void yyerror(const char *msg) {
+    printf("String REJECTED  (does not match pattern: %s)\n", msg);
+    accepted = 0;
+}
+
+int main() {
+    printf("=================================================================\n");
+    printf("  Experiment 15 - Language 2                                     \n");
+    printf("  L(G) = { ab(bbaa)^n bba(ba)^n | n >= 0 }                      \n");
+    printf("=================================================================\n");
+    printf("Pattern:  ab  [bbaa]^n  bba  [ba]^n\n\n");
+    printf("Expected strings:\n");
+    printf("  n=0 :  ab bba               =>  abbba\n");
+    printf("  n=1 :  ab bbaa bba ba       =>  abbbaabbaba\n");
+    printf("  n=2 :  ab bbaa bbaa bba ba ba\n\n");
+    printf("Enter a string and press Enter. Press Ctrl+D to quit.\n\n");
+    yyparse();
+    return 0;
+}
+
+_________________________________________________
+L = { (ab)ⁿ | n ≥ 1 }
+S → ab S | ab
+
+// .l
+
+%{
+#include <stdio.h>
+#include "parser.tab.h"
+%}
+
+%%
+
+"a"    { return A; }
+"b"    { return B; }
+"\n"   { return NEWLINE; }
+[ \t]  ;
+.      { return INVALID; }
+
+%%
+
+int yywrap() { return 1; }
+
+------
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+
+void yyerror(const char *msg);
+int yylex();
+%}
+
+%token A B NEWLINE INVALID
+
+%%
+
+program:
+    | program line
+    ;
+
+line:
+    NEWLINE
+    | S NEWLINE { printf("ACCEPTED\n"); }
+    | INVALID NEWLINE { printf("REJECTED\n"); }
+    ;
+
+S:
+    A B
+    | A B S
+    ;
+
+%%
+
+void yyerror(const char *msg) {
+    printf("REJECTED\n");
+}
+
+int main() {
+    printf("L = { (ab)^n | n>=1 }\n");
+    yyparse();
+}
+
+______________________________________________
+
+L = { aⁿ bⁿ cᵐ | n ≥ 1, m ≥ 1 }
+S → X C_part
+X → a X b | ab
+C_part → c C_part | c
+
+
+
+// .y
+
+%token A B C NEWLINE INVALID
+
+%%
+
+line:
+    NEWLINE
+    | S NEWLINE { printf("ACCEPTED\n"); }
+    | INVALID NEWLINE { printf("REJECTED\n"); }
+    ;
+
+S:
+    X C_part
+    ;
+
+X:
+    A X B
+    | A B
+    ;
+
+C_part:
+    C
+    | C_part C
+    ;
+
+___________________________________________
+
+{ aⁿ bⁿ | n ≥ 0 }
+
+S → a S b | ε
+
+S:
+    A S B
+    |
+    ;
+
+
+______________________________
+
+L = { aⁿ bᵐ cⁿ | n ≥ 1, m ≥ 1 }
+
+S → a S c | a B c
+B → b B | b
+S:
+    A S C
+    | A B_part C
+    ;
+
+B_part:
+    B
+    | B_part B
+    ;

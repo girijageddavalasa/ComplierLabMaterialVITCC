@@ -1,0 +1,336 @@
+ast.h
+/* ast.h - Shared AST node definition included by both lexer and parser */
+#ifndef AST_H
+#define AST_H
+
+typedef struct Node {
+    char        op;           /* Operator: + - * / ^      */
+    double      val;          /* Numeric value (leaves)   */
+    int         is_num;       /* 1=leaf number, 0=operator */
+    struct Node *left;        /* Left child               */
+    struct Node *right;       /* Right child              */
+} Node;
+
+/* Constructor functions */
+Node *make_num(double v);
+Node *make_op(char op, Node *l, Node *r);
+
+/* Traversal / display functions */
+void print_infix(Node *n);
+void print_postfix(Node *n);
+void print_tree(Node *n, int depth);
+void free_tree(Node *n);
+
+#endif
+
+
+
+
+ast.l
+/* ast.l - Lexer for Infix to Postfix (AST) conversion */
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include "ast.h"        /* AST node type used by parser */
+#include "ast.tab.h"    /* YACC-generated token definitions */
+%}
+
+%%
+
+[0-9]+(\.[0-9]+)?  {
+    /* Match integer or decimal number */
+    yylval.dval = atof(yytext);
+    return NUMBER;
+}
+
+"+"    { return PLUS;   }   /* Addition       */
+"-"    { return MINUS;  }   /* Subtraction    */
+"*"    { return TIMES;  }   /* Multiplication */
+"/"    { return DIVIDE; }   /* Division       */
+"^"    { return POWER;  }   /* Exponentiation */
+"("    { return LPAREN; }   /* Open paren     */
+")"    { return RPAREN; }   /* Close paren    */
+"\n"   { return NEWLINE; }  /* End of expression */
+
+[ \t]  ;                    /* Skip spaces and tabs */
+
+.      {
+    /* Unrecognised character */
+    printf("Unknown token: %s\n", yytext);
+}
+
+%%
+
+int yywrap() {
+    return 1;   /* Signal end of input */
+}
+
+
+ast.y
+/* ast.y - Parser to build AST and convert Infix to Postfix */
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+/* -------------------------------------------------------
+   AST Node Definition
+   Each node is either a leaf (number) or an operator
+   with left and right children.
+------------------------------------------------------- */
+typedef struct Node {
+    char        op;           /* Operator character: + - * / ^  */
+    double      val;          /* Number value (used for leaves)  */
+    int         is_num;       /* 1 = leaf node, 0 = operator node */
+    struct Node *left;        /* Left child  */
+    struct Node *right;       /* Right child */
+} Node;
+
+/* --- Function prototypes --- */
+Node *make_num(double v);
+Node *make_op(char op, Node *l, Node *r);
+void  print_infix(Node *n);
+void  print_postfix(Node *n);
+void  print_tree(Node *n, int depth, char *prefix, int is_left);
+void  free_tree(Node *n);
+void  yyerror(const char *msg);
+int   yylex();
+
+/* -------------------------------------------------------
+   Create a leaf node storing a number
+------------------------------------------------------- */
+Node *make_num(double v) {
+    Node *n   = (Node *)malloc(sizeof(Node));
+    n->op     = '\0';
+    n->val    = v;
+    n->is_num = 1;
+    n->left   = NULL;
+    n->right  = NULL;
+    return n;
+}
+
+/* -------------------------------------------------------
+   Create an operator node with two children
+------------------------------------------------------- */
+Node *make_op(char op, Node *l, Node *r) {
+    Node *n   = (Node *)malloc(sizeof(Node));
+    n->op     = op;
+    n->val    = 0;
+    n->is_num = 0;
+    n->left   = l;
+    n->right  = r;
+    return n;
+}
+
+/* -------------------------------------------------------
+   Print expression in INFIX form (with parentheses)
+------------------------------------------------------- */
+void print_infix(Node *n) {
+    if (!n) return;
+    if (n->is_num) {
+        printf("%.6g", n->val);
+    } else {
+        printf("(");
+        print_infix(n->left);
+        printf(" %c ", n->op);
+        print_infix(n->right);
+        printf(")");
+    }
+}
+
+/* -------------------------------------------------------
+   Print expression in POSTFIX form
+   POST-ORDER traversal: left -> right -> operator
+------------------------------------------------------- */
+void print_postfix(Node *n) {
+    if (!n) return;
+    if (n->is_num) {
+        printf("%.6g ", n->val);
+    } else {
+        print_postfix(n->left);
+        print_postfix(n->right);
+        printf("%c ", n->op);
+    }
+}
+
+/* -------------------------------------------------------
+   Print AST top-to-bottom with branch lines
+   
+   Example for  3 + 4 * 2 :
+   
+        [ + ]
+       /     \
+     [3]    [ * ]
+            /   \
+          [4]   [2]
+   
+   prefix   = the indent string built up so far
+   is_left  = 1 if this node is a left child, 0 if right
+------------------------------------------------------- */
+void print_tree(Node *n, int depth, char *prefix, int is_left) {
+    /* Buffer to build the next level's prefix string */
+    char new_prefix[512];
+
+    if (!n) return;
+
+    /* --- Print current node --- */
+    printf("%s", prefix);
+
+    if (depth == 0) {
+        /* Root node: no branch symbol */
+        printf("      ");          /* centre indent for root */
+    } else {
+        /* Child node: show branch corner */
+        printf("%s", is_left ? "+--L-- " : "+--R-- ");
+    }
+
+    /* Print node label */
+    if (n->is_num)
+        printf("[%.4g]\n", n->val);
+    else
+        printf("[ %c ]\n", n->op);
+
+    /* --- If leaf, nothing more to do --- */
+    if (!n->left && !n->right) return;
+
+    /* --- Build prefix for children --- */
+    if (depth == 0) {
+        /* Children of root get a plain indent */
+        snprintf(new_prefix, sizeof(new_prefix), "%s       ", prefix);
+    } else {
+        /* Extend prefix: if we were a left child, add a "|"
+           so the right sibling's lines connect properly      */
+        snprintf(new_prefix, sizeof(new_prefix), "%s%s",
+                 prefix,
+                 is_left ? "|       " : "        ");
+    }
+
+    /* --- Print connector line between node and children --- */
+    printf("%s|\n", new_prefix);
+
+    /* --- Recurse into children --- */
+    if (n->left && n->right) {
+        /* Both children: print left first, then right */
+        print_tree(n->left,  depth + 1, new_prefix, 1);
+        printf("%s|\n", new_prefix);
+        print_tree(n->right, depth + 1, new_prefix, 0);
+    } else if (n->left) {
+        print_tree(n->left,  depth + 1, new_prefix, 1);
+    } else {
+        print_tree(n->right, depth + 1, new_prefix, 0);
+    }
+}
+
+/* -------------------------------------------------------
+   Free all dynamically allocated AST nodes
+------------------------------------------------------- */
+void free_tree(Node *n) {
+    if (!n) return;
+    free_tree(n->left);
+    free_tree(n->right);
+    free(n);
+}
+%}
+
+/* YACC value type: either a double or an AST Node pointer */
+%union {
+    double  dval;
+    Node   *node;
+}
+
+/* Token declarations */
+%token <dval> NUMBER
+%token PLUS MINUS TIMES DIVIDE POWER
+%token LPAREN RPAREN NEWLINE
+
+/* Non-terminal result types */
+%type <node> expr term factor base
+
+/* Operator precedence: lowest to highest */
+%left  PLUS MINUS
+%left  TIMES DIVIDE
+%right POWER
+%right UMINUS
+
+%%
+
+program:
+    /* empty */
+    | program line
+    ;
+
+line:
+    NEWLINE
+    | expr NEWLINE {
+        Node *tree = $1;
+
+        printf("\n+------------- AST (Top to Bottom) -------------+\n\n");
+        print_tree(tree, 0, "", 0);       /* Start from root */
+
+        printf("\nInfix   :  ");
+        print_infix(tree);
+        printf("\n");
+
+        printf("Postfix :  ");
+        print_postfix(tree);
+        printf("\n");
+        printf("+------------------------------------------------+\n\n");
+
+        free_tree(tree);
+    }
+    ;
+
+/* Addition and subtraction */
+expr:
+    expr PLUS  term  { $$ = make_op('+', $1, $3); }
+    | expr MINUS term  { $$ = make_op('-', $1, $3); }
+    | term             { $$ = $1; }
+    ;
+
+/* Multiplication and division */
+term:
+    term TIMES  factor { $$ = make_op('*', $1, $3); }
+    | term DIVIDE factor { $$ = make_op('/', $1, $3); }
+    | factor             { $$ = $1; }
+    ;
+
+/* Exponentiation - right-associative */
+factor:
+    base POWER factor  { $$ = make_op('^', $1, $3); }
+    | base               { $$ = $1; }
+    ;
+
+/* Atoms: numbers, parentheses, unary minus */
+base:
+    NUMBER               { $$ = make_num($1); }
+    | LPAREN expr RPAREN   { $$ = $2; }
+    | MINUS base %prec UMINUS {
+        $$ = make_op('-', make_num(0), $2);
+    }
+    ;
+
+%%
+
+void yyerror(const char *msg) {
+    fprintf(stderr, "Parse error: %s\n", msg);
+}
+
+int main() {
+    printf("================================================\n");
+    printf("  Experiment 14: Infix to Postfix via AST       \n");
+    printf("  (Using LEX and YACC Tools)                    \n");
+    printf("================================================\n");
+    printf("Enter an infix expression and press Enter.\n");
+    printf("Operators supported: + - * / ^ and ( )\n");
+    printf("Examples:\n");
+    printf("  3 + 4 * 2\n");
+    printf("  (1 + 2) * (3 - 4)\n");
+    printf("  2 ^ 3 ^ 2\n");
+    printf("Press Ctrl+D to quit.\n\n");
+
+    yyparse();
+    return 0;
+}
+
+

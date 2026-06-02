@@ -1,0 +1,244 @@
+// tac.l
+
+%{
+#include "tac.tab.h"
+#include <stdlib.h>
+#include <string.h>
+%}
+
+%%
+
+[0-9]+        { yylval.ival = atoi(yytext); return NUM; }
+[a-zA-Z]+     { strcpy(yylval.sval, yytext); return ID; }
+
+[+\-*/=();]   { return yytext[0]; }
+
+[ \t\n]+      ;   // ignore spaces
+
+.             { printf("Invalid\n"); }
+
+%%
+
+int yywrap() { return 1; }
+
+
+____________________________________
+
+
+// tac.y
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int temp = 0;
+FILE *fp;
+
+char* newtemp() {
+    static char t[10];
+    sprintf(t, "t%d", temp++);
+    return t;
+}
+
+void emit(char *res, char *a1, char op, char *a2) {
+    fprintf(fp, "%s = %s %c %s\n", res, a1, op, a2);
+}
+
+void emit_assign(char *res, char *val) {
+    fprintf(fp, "%s = %s\n", res, val);
+}
+
+void yyerror(char *s) {
+    printf("Error\n");
+}
+
+int yylex();
+%}
+
+%union {
+    int ival;
+    char sval[20];
+}
+
+%token <ival> NUM
+%token <sval> ID
+
+%type <sval> expr term factor
+
+%%
+
+stmt : ID '=' expr ';'
+      { emit_assign($1, $3); }
+     ;
+
+expr : expr '+' term {
+        char *t = newtemp();
+        emit(t, $1, '+', $3);
+        strcpy($$, t);
+     }
+     | expr '-' term {
+        char *t = newtemp();
+        emit(t, $1, '-', $3);
+        strcpy($$, t);
+     }
+     | term { strcpy($$, $1); }
+     ;
+
+term : term '*' factor {
+        char *t = newtemp();
+        emit(t, $1, '*', $3);
+        strcpy($$, t);
+     }
+     | term '/' factor {
+        char *t = newtemp();
+        emit(t, $1, '/', $3);
+        strcpy($$, t);
+     }
+     | factor { strcpy($$, $1); }
+     ;
+
+factor : '(' expr ')' { strcpy($$, $2); }
+       | NUM { sprintf($$, "%d", $1); }
+       | ID  { strcpy($$, $1); }
+       ;
+
+%%
+
+int main() {
+    fp = fopen("tac.txt", "w");   // clear file
+    printf("Enter expression:\n");
+    yyparse();
+    fclose(fp);
+
+    printf("\nTAC generated in tac.txt\n");
+    return 0;
+}
+
+
+_____________________________________
+
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX 100
+
+typedef struct {
+    char res[10], a1[10], op, a2[10];
+    int isBinary;
+} TAC;
+
+TAC code[MAX];
+int count = 0;
+
+/* Check number */
+int isNum(char *s) {
+    for (int i = 0; s[i]; i++)
+        if (!isdigit(s[i])) return 0;
+    return 1;
+}
+
+/* Parse TAC line */
+int parse(char *line, TAC *t) {
+    char *eq = strchr(line, '=');
+    if (!eq) return 0;
+
+    *eq = '\0';
+    strcpy(t->res, line);
+
+    char *rhs = eq + 1;
+
+    if (strchr(rhs, '+') || strchr(rhs, '-') ||
+        strchr(rhs, '*') || strchr(rhs, '/')) {
+
+        sscanf(rhs, "%[^+-*/]%c%[^+-*/]", t->a1, &t->op, t->a2);
+        t->isBinary = 1;
+    } else {
+        strcpy(t->a1, rhs);
+        t->isBinary = 0;
+    }
+    return 1;
+}
+
+/* Load helper */
+void load(char *reg, char *val) {
+    if (isNum(val))
+        printf("MOV %s, %s\n", reg, val);
+    else
+        printf("MOV %s, [%s]\n", reg, val);
+}
+
+/* Generate assembly */
+void generate(TAC *t) {
+
+    if (!t->isBinary) {
+        load("AX", t->a1);
+        printf("MOV [%s], AX\n\n", t->res);
+        return;
+    }
+
+    load("AX", t->a1);
+
+    if (t->op == '+') {
+        if (isNum(t->a2))
+            printf("ADD AX, %s\n", t->a2);
+        else
+            printf("ADD AX, [%s]\n", t->a2);
+    }
+
+    else if (t->op == '-') {
+        if (isNum(t->a2))
+            printf("SUB AX, %s\n", t->a2);
+        else
+            printf("SUB AX, [%s]\n", t->a2);
+    }
+
+    else if (t->op == '*') {
+        if (isNum(t->a2))
+            printf("MOV BX, %s\n", t->a2);
+        else
+            printf("MOV BX, [%s]\n", t->a2);
+
+        printf("MUL BX\n");
+    }
+
+    else if (t->op == '/') {
+        printf("XOR DX, DX\n");
+
+        if (isNum(t->a2))
+            printf("MOV BX, %s\n", t->a2);
+        else
+            printf("MOV BX, [%s]\n", t->a2);
+
+        printf("DIV BX\n");
+    }
+
+    printf("MOV [%s], AX\n\n", t->res);
+}
+
+/* MAIN */
+int main() {
+    FILE *fp = fopen("tac.txt", "r");
+    char line[100];
+
+    if (!fp) {
+        printf("tac.txt not found!\n");
+        return 0;
+    }
+
+    while (fgets(line, sizeof(line), fp)) {
+        line[strcspn(line, "\n")] = 0; // remove newline
+        if (parse(line, &code[count]))
+            count++;
+    }
+
+    fclose(fp);
+
+    printf("\n===== 8086 Assembly =====\n\n");
+
+    for (int i = 0; i < count; i++)
+        generate(&code[i]);
+
+    return 0;
+}

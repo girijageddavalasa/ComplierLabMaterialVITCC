@@ -1,0 +1,616 @@
+
+__________________________________________
+
+
+
+
+__________________________________________
+// number of vowels and consonants
+//%option noyywrap
+
+%{
+#include <stdio.h>
+int v = 0;
+int c = 0;
+%}
+
+%%
+[aeiouAEIOU]    { v++; }
+[a-zA-Z]        { c++; }
+\n              { }
+.               { }
+%%
+
+int main() {
+    printf("Enter text:\n");
+    yylex();
+
+    printf("\nNumber of vowels: %d\n", v);
+    printf("Number of consonants: %d\n", c);
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+_______________________________
+//  count digit letter and spaces
+%option noyywrap
+
+%{
+#include <stdio.h>
+int digits=0, letters=0, spaces=0;
+%}
+
+%%
+
+[0-9]      { digits++; }
+[a-zA-Z]   { letters++; }
+[ \t\n]    { spaces++; }
+.          { }
+
+%%
+
+int main() {
+    printf("Enter text:\n");
+    yylex();
+    printf("Digits: %d\nLetters: %d\nSpaces: %d\n", digits, letters, spaces);
+    return 0;
+}
+
+__________________________________
+//count word and line
+
+%option noyywrap
+
+%{
+#include <stdio.h>
+int words=0, lines=0;
+%}
+
+%%
+
+\n          { lines++; }
+[ \t]+      { }
+[^ \t\n]+   { words++; }
+
+%%
+
+int main() {
+    printf("Enter text:\n");
+    yylex();
+    printf("Words: %d\nLines: %d\n", words, lines);
+    return 0;
+}
+_______________________________
+
+// remove extra spaces
+
+%option noyywrap
+
+%%
+
+[ \t]+      { printf(" "); }
+\n          { printf("\n"); }
+.           { printf("%s", yytext); }
+
+%%
+
+int main() {
+    yylex();
+    return 0;
+}
+
+
+_________________________________
+
+// recognize number and words 
+
+%option noyywrap
+
+%%
+
+[0-9]+        { printf("Number: %s\n", yytext); }
+[a-zA-Z]+     { printf("Word: %s\n", yytext); }
+.             { }
+
+%%
+
+int main() {
+    yylex();
+    return 0;
+}
+
+___________________________
+
+// count 
+
+%{
+#include <stdio.h>
+#include <string.h>
+
+int count = 0;
+char word[50];
+%}
+
+%%
+
+[a-zA-Z]+ {
+    if(strcmp(yytext, word) == 0)
+        count++;
+}
+
+[ \t\n]+ ;
+
+. ;
+
+%%
+
+int main() {
+    FILE *fp;
+
+    printf("Enter word to search: ");
+    scanf("%s", word);
+
+    fp = fopen("input.txt", "r");
+    yyin = fp;
+
+    yylex();
+
+    printf("\nFrequency of '%s' = %d\n", word, count);
+
+    fclose(fp);
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+
+// c code
+
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX_WORDS 1000
+#define MAX_LEN 50
+
+int main() {
+    FILE *fp;
+    char word[MAX_LEN];
+    char words[MAX_WORDS][MAX_LEN];
+    int count[MAX_WORDS] = {0};
+    int i, j, found, total = 0;
+
+    fp = fopen("input.txt", "r");
+    if (fp == NULL) {
+        printf("Error opening file!\n");
+        return 1;
+    }
+
+    while (fscanf(fp, "%s", word) != EOF) {
+        // Convert word to lowercase
+        for (i = 0; word[i]; i++) {
+            word[i] = tolower(word[i]);
+        }
+
+        // Remove punctuation (basic)
+        int len = strlen(word);
+        while (len > 0 && ispunct(word[len - 1])) {
+            word[len - 1] = '\0';
+            len--;
+        }
+
+        found = 0;
+
+        // Check if word already exists
+        for (i = 0; i < total; i++) {
+            if (strcmp(words[i], word) == 0) {
+                count[i]++;
+                found = 1;
+                break;
+            }
+        }
+
+        // If new word
+        if (!found) {
+            strcpy(words[total], word);
+            count[total] = 1;
+            total++;
+        }
+    }
+
+    fclose(fp);
+
+    // Print results
+    printf("\nWord Frequencies:\n");
+    for (i = 0; i < total; i++) {
+        printf("%s : %d\n", words[i], count[i]);
+    }
+
+    return 0;
+}
+
+
+//
+
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX_WORDS 1000
+#define MAX_LEN 50
+#define MAX_LINE 200
+
+int main() {
+    char line[MAX_LINE];
+    char word[MAX_LEN];
+    char words[MAX_WORDS][MAX_LEN];
+    int count[MAX_WORDS] = {0};
+
+    int i, j, k, found, total = 0;
+
+    printf("Enter text (type END to stop):\n");
+
+    while (1) {
+        fgets(line, sizeof(line), stdin);
+
+        // Stop condition
+        if (strncmp(line, "END", 3) == 0)
+            break;
+
+        i = 0;
+
+        while (line[i] != '\0') {
+
+            // Skip spaces
+            while (line[i] == ' ' || line[i] == '\t' || line[i] == '\n')
+                i++;
+
+            j = 0;
+
+            // Read a word
+            while (line[i] != '\0' && !isspace(line[i]) && !ispunct(line[i])) {
+                word[j++] = tolower(line[i]);
+                i++;
+            }
+
+            word[j] = '\0';
+
+            if (j == 0) {
+                i++;
+                continue;
+            }
+
+            found = 0;
+
+            // Check if word already exists
+            for (k = 0; k < total; k++) {
+                if (strcmp(words[k], word) == 0) {
+                    count[k]++;
+                    found = 1;
+                    break;
+                }
+            }
+
+            // New word
+            if (!found) {
+                strcpy(words[total], word);
+                count[total] = 1;
+                total++;
+            }
+        }
+    }
+
+    // Print results
+    printf("\nWord Frequencies:\n");
+    for (i = 0; i < total; i++) {
+        printf("%s : %d\n", words[i], count[i]);
+    }
+
+    return 0;
+}
+
+__________________________________________
+
+// replace in same file 
+
+%{
+#include <stdio.h>
+#include <string.h>
+
+char oldword[50], newword[50];
+%}
+
+%%
+
+[a-zA-Z]+ {
+    if(strcmp(yytext, oldword) == 0)
+        printf("%s", newword);
+    else
+        printf("%s", yytext);
+}
+
+[ \t\n]+ { printf("%s", yytext); }
+
+. { printf("%s", yytext); }
+
+%%
+
+int main() {
+    FILE *fp;
+
+    printf("Enter word to replace: ");
+    scanf("%s", oldword);
+
+    printf("Enter new word: ");
+    scanf("%s", newword);
+
+    fp = fopen("input.txt", "r");
+    yyin = fp;
+
+    yylex();
+
+    fclose(fp);
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+// one only  count
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX_WORDS 1000
+#define MAX_LEN 50
+#define MAX_LINE 200
+
+int main() {
+    char line[MAX_LINE];
+    char word[MAX_LEN];
+    char words[MAX_WORDS][MAX_LEN];
+    int count[MAX_WORDS] = {0};
+
+    int i, j, k, found, total = 0;
+
+    printf("Enter text (type END to stop):\n");
+
+    while (1) {
+        fgets(line, sizeof(line), stdin);
+
+        if (strncmp(line, "END", 3) == 0)
+            break;
+
+        i = 0;
+
+        while (line[i] != '\0') {
+
+            // Skip spaces
+            while (isspace(line[i]))
+                i++;
+
+            j = 0;
+
+            // Extract word
+            while (line[i] != '\0' && !isspace(line[i]) && !ispunct(line[i])) {
+                word[j++] = tolower(line[i]);
+                i++;
+            }
+
+            word[j] = '\0';
+
+            if (j == 0) {
+                i++;
+                continue;
+            }
+
+            found = -1;
+
+            // Check if word exists
+            for (k = 0; k < total; k++) {
+                if (strcmp(words[k], word) == 0) {
+                    found = k;
+                    break;
+                }
+            }
+
+            if (found != -1) {
+                count[found]++;
+            } else {
+                strcpy(words[total], word);
+                count[total] = 1;
+                total++;
+            }
+        }
+    }
+
+    // Find max frequency (latest wins in tie)
+    int max = -1;
+    int index = -1;
+
+    for (i = 0; i < total; i++) {
+        if (count[i] >= max) {  // >= ensures latest wins
+            max = count[i];
+            index = i;
+        }
+    }
+
+    // Output result
+    if (index != -1) {
+        printf("\nMost frequent word: %s\n", words[index]);
+        printf("Count: %d\n", max);
+    }
+
+    return 0;
+}
+
+___________________________________________
+
+// replace and save in new file 
+
+%{
+#include <stdio.h>
+#include <string.h>
+
+char oldword[50], newword[50];
+FILE *out;
+%}
+
+%%
+
+[a-zA-Z]+ {
+    if(strcmp(yytext, oldword) == 0)
+        fprintf(out, "%s", newword);
+    else
+        fprintf(out, "%s", yytext);
+}
+
+[ \t\n]+ { fprintf(out, "%s", yytext); }
+
+. { fprintf(out, "%s", yytext); }
+
+%%
+
+int main() {
+    FILE *in;
+
+    printf("Enter word to replace: ");
+    scanf("%s", oldword);
+
+    printf("Enter new word: ");
+    scanf("%s", newword);
+
+    in = fopen("input.txt", "r");      // read from input file
+    out = fopen("output.txt", "w");    // write to output file
+
+    yyin = in;
+
+    yylex();
+
+    fclose(in);
+    fclose(out);
+
+    printf("\nReplacement done. Check output.txt\n");
+
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+_____________________________________________
+
+// longest words
+
+%{
+#include <stdio.h>
+#include <string.h>
+
+char top[3][100];   // store top 3 words
+int len[3] = {0,0,0};
+%}
+
+%%
+
+[a-zA-Z]+ {
+    int l = strlen(yytext);
+
+    // Check if this word is in top 3
+    for(int i=0;i<3;i++) {
+        if(l >= len[i]) {
+
+            // shift down
+            for(int j=2;j>i;j--) {
+                len[j] = len[j-1];
+                strcpy(top[j], top[j-1]);
+            }
+
+            // insert new word
+            len[i] = l;
+            strcpy(top[i], yytext);
+            break;
+        }
+    }
+}
+
+[ \t\n]+ ;
+. ;
+
+%%
+
+int main() {
+    FILE *fp;
+
+    fp = fopen("input.txt", "r");
+    yyin = fp;
+
+    yylex();
+
+    printf("\nLongest word: %s (length = %d)\n", top[0], len[0]);
+
+    printf("\nTop 3 longest words:\n");
+    for(int i=0;i<3;i++) {
+        if(len[i] > 0)
+            printf("%s (length = %d)\n", top[i], len[i]);
+    }
+
+    fclose(fp);
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
+__________________________________________________________
+
+// longest word only one 
+
+%{
+#include <stdio.h>
+#include <string.h>
+
+char longest[100];
+int max = 0;
+%}
+
+%%
+
+[a-zA-Z]+ {
+    int l = strlen(yytext);
+
+    if(l >= max) {   
+        max = l;
+        strcpy(longest, yytext);
+    }
+}
+
+[ \t\n]+ ;
+. ;
+
+%%
+
+int main() {
+    FILE *fp = fopen("input.txt", "r");
+    yyin = fp;
+
+    yylex();
+
+    printf("Longest word: %s\n", longest);
+    printf("Length: %d\n", max);
+
+    fclose(fp);
+    return 0;
+}
+
+int yywrap() {
+    return 1;
+}
+
